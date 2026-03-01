@@ -112,29 +112,29 @@
 
 ### Ключові особистості
 
-| Ім'я | Роль | Розділи |
-|------|------|---------|
-| Dark | Кодер, X-Trade. Автор статей з програмування в Spectrum Expert. Кодер Illusion. | Розд.01, Розд.04, Розд.05, Розд.06, Розд.07, Розд.10 |
-| Introspec (spke) | Кодер, Life on Mars. Зворотна розробка Illusion. Автор статей на Hype (технічні аналізи, серія GO WEST, DOWN_HL). Кодер демо Eager. | Розд.01--Розд.12, Розд.15, Розд.23 |
-| n1k-o | Музикант, Skrju. Написав саундтрек Eager. Розробив техніку гібридних барабанів спільно з Introspec. | Розд.09, Розд.12 |
-| diver4d | Кодер, 4D+TBK (Triebkraft). Демо GABBA (CAFe 2019). Піонер робочого процесу синхронізації через відеоредактор (Luma Fusion). | Розд.09, Розд.12 |
-| DenisGrachev | Кодер. Old Tower, рушій GLUF, рушій Ringo, Dice Legends. Техніка RET-ланцюжок. | Розд.03, Розд.08 |
-| Robus | Кодер. Система потоків Z80, демо WAYHACK. | Розд.12 |
-| psndcj (cyberjack) | Кодер, 4D+TBK (Triebkraft). Експертиза AY/TurboSound. Демо Break Space (ефект Magen Fractal). | Розд.01, Розд.07, Розд.14 |
-| Screamer (sq) | Кодер, Skrju. Дослідження оптимізації чанкових пікселів (Born Dead #05, Hype). Посібник зі середовища розробки. | Розд.01, Розд.07 |
-| Ped7g | Peter Helcmanovsky. Мейнтейнер sjasmplus, контриб'ютор ZX Spectrum Next. Зворотний зв'язок щодо знакової арифметики та RLE. | Розд.04, Розд.14, Дод. F |
-| RST7 | Кодер. Оптимізація DOWN_HL з подвійним лічильником. | Розд.02 |
+| Name | Role | Chapters |
+|------|------|----------|
+| Dark | Coder, X-Trade. Author of Spectrum Expert programming articles. Coder of Illusion. | Ch01, Ch04, Ch05, Ch06, Ch07, Ch10 |
+| Introspec (spke) | Coder, Life on Mars. Reverse-engineered Illusion. Authored Hype articles (technical analyses, GO WEST series, DOWN_HL). Coded Eager demo. | Ch01--Ch12, Ch15, Ch23 |
+| n1k-o | Musician, Skrju. Composed Eager soundtrack. Developed hybrid drum technique with Introspec. | Ch09, Ch12 |
+| diver4d | Coder, 4D+TBK (Triebkraft). GABBA demo (CAFe 2019). Pioneered video-editor sync workflow (Luma Fusion). | Ch09, Ch12 |
+| DenisGrachev | Coder. Old Tower, GLUF engine, Ringo engine, Dice Legends. RET-chaining technique. | Ch03, Ch08 |
+| Robus | Coder. Z80 threading system, WAYHACK demo. | Ch12 |
+| psndcj (cyberjack) | Coder, 4D+TBK (Triebkraft). AY/TurboSound expertise. Break Space demo (Magen Fractal effect). | Ch01, Ch07, Ch14 |
+| Screamer (sq) | Coder, Skrju. Chunky pixel optimisation research (Born Dead #05, Hype). Development environment guide. | Ch01, Ch07 |
+| Ped7g | Peter Helcmanovsky. sjasmplus maintainer, ZX Spectrum Next contributor. Signed arithmetic and RLE feedback. | Ch04, Ch14, App F |
+| RST7 | Coder. Dual-counter DOWN_HL optimisation. | Ch02 |
 
 ### Ключові демо та продукції
 
-| Назва | Автор/Група | Рік | Розділи |
-|-------|------------|-----|---------|
-| Illusion | X-Trade (Dark) | 1996 | Розд.01, Розд.04, Розд.05, Розд.06, Розд.07, Розд.10 |
-| Eager (to live) | Introspec / Life on Mars | 2015 | Розд.02, Розд.03, Розд.09, Розд.10, Розд.12 |
-| GABBA | diver4d / 4D+TBK | 2019 | Розд.12 |
-| WAYHACK | Robus | -- | Розд.12 |
-| Old Tower | DenisGrachev | -- | Розд.08 |
-| Lo-Fi Motion | -- | -- | Розд.20 |
+| Name | Author/Group | Year | Chapters |
+|------|-------------|------|----------|
+| Illusion | X-Trade (Dark) | 1996 | Ch01, Ch04, Ch05, Ch06, Ch07, Ch10 |
+| Eager (to live) | Introspec / Life on Mars | 2015 | Ch02, Ch03, Ch09, Ch10, Ch12 |
+| GABBA | diver4d / 4D+TBK | 2019 | Ch12 |
+| WAYHACK | Robus | -- | Ch12 |
+| Old Tower | DenisGrachev | -- | Ch08 |
+| Lo-Fi Motion | -- | -- | Ch20 |
 
 ### Ключові публікації
 

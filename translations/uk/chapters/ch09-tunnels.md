@@ -37,7 +37,31 @@ Introspec пішов далі з псевдо-чанкі рендерингом.
 
 Форма тунелю імпліцитна, не явна. Немає обчислення відстані від центру, жодної таблиці кутів, жодного перетворення в полярні координати. Натомість параметри частоти та фази плазми організовані так, що результуючий колірний патерн природно формує концентричні кільця при перегляді на екрані. Кільця виникають з інтерференції синусоїдальних хвиль, так само як патерни Муаре виникають з накладення сіток. Підлаштуй параметри — і кільця стягуються до центру, створюючи ілюзію глибини — погляд вниз у тунель.
 
+<!-- figure: ch09_tunnel_plasma_computation -->
+
+```mermaid id:ch09_plasma_the_colour_engine
+graph TD
+    A["For each attribute cell (row, col)"] --> B["Look up sin(col × freq1 + phase1)<br>from 256-byte sine table"]
+    B --> C["Look up sin(row × freq2 + phase2)"]
+    C --> D["Look up sin(col+row + phase3)"]
+    D --> E["Sum the three sine values"]
+    E --> F["Index into colour map<br>(sum → attribute byte)"]
+    F --> G["Write attribute to buffer"]
+    G --> H{More cells<br>in quadrant?}
+    H -- Yes --> A
+    H -- No --> I["4-fold symmetry copy:<br>top-left → top-right,<br>bottom-left, bottom-right"]
+    I --> J["Increment phase1, phase2, phase3<br>→ next frame"]
+    J --> A
+
+    style F fill:#f9f,stroke:#333
+    style I fill:#bfb,stroke:#333
+```
+
+> **Key insight:** There is no distance-from-centre calculation, no angle table, no polar coordinate transform. The tunnel shape emerges from sine wave interference — concentric rings appear naturally from overlapping frequencies. Only one quarter (16×12) is computed; the rest is mirrored.
+
 Це дешевше за справжній геометричний тунель (який потребував би попіксельних пошуків відстані та кута) і дає візуально багатий результат. Компроміс — менша геометрична точність, але при роздільності 32x24 геометрична точність і так не стояла на порядку денному.
+
+![Plasma algorithm — true-colour sine sum reference (left) vs ZX Spectrum 15-colour attribute output (right), showing how four-fold symmetry halves computation](../../build/screenshots/proto_ch09_plasma.png)
 
 ---
 
@@ -47,9 +71,9 @@ Introspec пішов далі з псевдо-чанкі рендерингом.
 
 Тунель при погляді ззаду симетричний відносно і горизонтальної, і вертикальної осей. Якщо обчислити одну чверть екрану — верхній лівий блок 16x12 — можна скопіювати його в інші три чверті дзеркальним відображенням. Верхній лівий у верхній правий — горизонтальне відображення. Верхній лівий у нижній лівий — вертикальне відображення. Верхній лівий у нижній правий — обидва.
 
-Процедура копіювання надзвичайно щільна. У реалізації Introspec'а HL вказує на вихідний байт у верхній лівій чверті, а три адреси призначення (верхня права, нижня ліва, нижня права) підтримуються комбінацією абсолютних адрес та регістрової пари BC:
+The copy routine is tight. In Introspec's implementation, HL points to the source byte in the top-left quarter, and the three destination addresses (top-right, bottom-left, bottom-right) are maintained in a combination of absolute addresses and register pair BC:
 
-```z80
+```z80 id:ch09_four_fold_symmetry_divide_and
     ld a,(hl)      ; read source byte from top-left quarter
     ld (nn),a      ; write to upper-right quarter (mirrored)
     ld (mm),a      ; write to lower-left quarter (mirrored)
@@ -73,7 +97,7 @@ Introspec пішов далі з псевдо-чанкі рендерингом.
 
 Реалізація спирається на розгорнуті послідовності `ld hl,nn : ldi`. Кожна `ld hl,nn` завантажує нову адресу джерела — позицію у вихідному буфері для відбору для цієї конкретної вихідної комірки. Наступна `ldi` копіює з (HL) у (DE), просуваючи DE на наступну вихідну позицію. Адреси джерел організовані так, що комірки біля центру екрану відбирають з близьких позицій вихідних даних (збільшення), тоді як комірки біля країв відбирають з широко розставлених позицій (стиснення). Варіюй відображення з часом — і зум анімується.
 
-```z80
+```z80 id:ch09_the_chaos_zoomer
     ; Unrolled chaos zoomer fragment
     ld hl,src_addr_0    ; source for output cell 0
     ldi                 ; copy to output, advance DE
@@ -84,7 +108,7 @@ Introspec пішов далі з псевдо-чанкі рендерингом.
     ; ... repeated for all 768 cells (or one quarter, with symmetry)
 ```
 
-Ключова оптимізація: оскільки `ldi` автоінкрементує DE, тобі ніколи не потрібно обчислювати або завантажувати адресу призначення. Вивід завжди записується послідовно в RAM атрибутів. Варіюються лише адреси джерел, і вони вбудовані безпосередньо в потік інструкцій як безпосередні операнди. Це робить зумер довгою послідовністю пар `ld hl,nn : ldi` — концептуально просто, але кожна пара займає лише 6 байтів і 26 тактів. Для повної чверті екрану з 192 комірок це приблизно 5 000 тактів чистого копіювання, плюс чотиристороннє копіювання симетрії зверху.
+The key optimisation: since `ldi` auto-increments DE, you never need to calculate or load the destination address. The output is always written sequentially into attribute RAM. Only the source addresses vary, and they are embedded directly in the instruction stream as immediate operands. This makes the zoomer a long sequence of `ld hl,nn : ldi` pairs -- conceptually simple, but each pair is just 5 bytes (3 for `ld hl,nn` + 2 for `ldi`) and 26 T-states. For a full quarter-screen of 192 cells, that is roughly 5,000 T-states of pure copying, plus the four-way symmetry copy on top.
 
 Ускладнення в тому, що адреси джерел змінюються кожен кадр по мірі прогресу зуму. Оновлення 192 двобайтних адрес, вбудованих у код, коштувало б майже стільки ж, скільки саме копіювання. Ось де в картину входить генерація коду.
 
@@ -132,7 +156,7 @@ Eager розроблявся між червнем та серпнем 2015 ро
 
 Музику написав n1k-o (зі Skrju), чий трек дав демо його ритмічну структуру. Гібридна техніка барабанів — цифровий зразок для атакуючого транзієнту, обвідна AY для загасання — була інновацією n1k-o, і саме вона визначила все архітектурне рішення побудувати рушій асинхронної генерації кадрів. Без барабанів Eager могло б бути простішим демо. З ними воно стало тим, що Introspec назвав "найважчою річчю, яку я зробив у демо."
 
-Розробка була стиснута приблизно в десять тижнів. Партійна версія, подана на 3BM Open Air 2015, все ще мала баги — file_id.diz містив подяку diver'у з 4D+TBK "за класну підказку" та вибачення за нестабільність. Фінальна версія виправила проблеми таймінгу на різних моделях Spectrum (128K, +2, +2A/B, +3, Pentagon — усі лише на 3,5 МГц, без turbo). Таке перехресне запилення — сценер з однієї групи передає технічну ідею кодеру з іншої — ось як еволюціонує демосцена ZX.
+The development was compressed into roughly ten weeks. The party version, submitted to 3BM Open Air 2015, still had bugs -- the file_id.diz carried a note thanking diver of 4D+TBK "for the cool tip" and apologising for the instability. The final version fixed the timing issues across Spectrum models (128K, +2, +2A/B, +3, Pentagon -- all at 3.5MHz only, no turbo). That cross-pollination -- a scener from one group passing a technical insight to a coder from another -- is how the ZX demoscene evolves.
 
 ---
 
@@ -151,7 +175,7 @@ Eager розроблявся між червнем та серпнем 2015 ро
 
 Нам потрібен фіксований піксельний патерн, щоб кольори чорнила та паперу були обидва видимі. Проста шахматка працює:
 
-```z80
+```z80 id:ch09_step_1_fill_pixel_memory_with
 ; Fill bitmap memory ($4000-$57FF) with checkerboard pattern
     ld hl,$4000
     ld de,$4001
@@ -167,7 +191,7 @@ Eager розроблявся між червнем та серпнем 2015 ро
 
 Вирівняй за сторінкою 256-байтну таблицю синусів для швидкого індексування. Її можна згенерувати під час збірки за допомогою Lua-скриптингу sjasmplus або попередньо обчислити та включити як двійкові дані:
 
-```z80
+```lua id:ch09_step_2_sine_table
     ALIGN 256
 sin_table:
     LUA ALLPASS
@@ -182,7 +206,7 @@ sin_table:
 
 Обчисли значення плазми для кожної комірки у верхній лівій чверті 16x12. Результат — індекс у колірну таблицю, що видає байт атрибута:
 
-```z80
+```z80 id:ch09_step_3_plasma_for_one_quarter
 ; Calculate plasma for top-left quarter (16 columns x 12 rows)
 ; Input: frame_phase is incremented each frame
 ; Output: attr_buffer filled with 192 attribute bytes
@@ -245,7 +269,7 @@ calc_plasma:
 
 ### Крок 5: Основний цикл
 
-```z80
+```z80 id:ch09_step_5_main_loop
 main_loop:
     halt                     ; wait for vsync
 
@@ -265,6 +289,8 @@ main_loop:
 ```
 
 Різні інкременти фаз змушують терми плазми обертатися з різними швидкостями. Експериментуй з цими значеннями — навіть невеликі зміни породжують драматично різні візуальні текстури.
+
+![Attribute-based plasma effect — sine wave interference produces rippling colour patterns across the 32x24 attribute grid](../../build/screenshots/ch09_plasma.png)
 
 ### Ключова ідея
 

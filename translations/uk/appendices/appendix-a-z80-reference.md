@@ -392,12 +392,14 @@
 ### Практичні прийоми
 
 **Перевірка A на нуль без CP 0:**
+
 ```z80
     or   a              ; 4T  sets Z if A=0, clears C
     and  a              ; 4T  same effect, but also sets H
 ```
 
 **Перевірка перенесення після 16-бітного INC/DEC:** Неможливо. `INC rr`/`DEC rr` не встановлюють прапорці. Щоб перевірити, чи 16-бітний регістр досяг нуля:
+
 ```z80
     ld   a, b           ; 4T
     or   c              ; 4T  Z set if BC = 0
@@ -444,7 +446,7 @@
 
 `EXX` обмінює BC/DE/HL з BC'/DE'/HL' за **4T**. Це дає тобі шість додаткових 8-бітних регістрів (або три додаткових 16-бітних пари) фактично безкоштовно. Типове використання: зберігати вказівники в тіньовому наборі та обмінювати в/з за потребою.
 
-**Увага:** Обробник переривань ROM Spectrum (IM1) використовує тіньові регістри. Якщо переривання дозволені, дані `EXX`/`EX AF,AF'` будуть зіпсовані при кожному перериванні. Завжди виконуй `DI` перед використанням тіньових регістрів, або перейди на IM2 зі своїм обробником.
+**Warning:** The Spectrum ROM interrupt handler (IM1) uses IY (it must point to the system variables at $5C3A or to safe memory). Shadow registers BC'/DE'/HL' and AF' are preserved by the ROM ISR and safe to use with interrupts enabled. If your code repurposes IY, disable interrupts first (`DI`) or switch to IM2 with your own handler.
 
 ### Зв'язки регістрових пар з інструкціями
 
@@ -468,26 +470,32 @@
 ; pixel_addr: calculate screen address from coordinates
 ; Input:  B = Y (0-191), C = X (0-255)
 ; Output: HL = byte address, A = pixel bit position
-; Cost:   ~55 T-states
+; Cost:   ~107 T-states
 ;
 pixel_addr:
     ld   a, b           ; 4T   A = Y
-    and  $07             ; 7T   scanline within char cell (SSS)
+    and  $07             ; 7T   scanline within char cell (Y:2-0)
     or   $40             ; 7T   add screen base ($4000 high byte)
     ld   h, a           ; 4T   H = 010 00 SSS (partial)
     ld   a, b           ; 4T   A = Y again
     rra                 ; 4T   \
-    rra                 ; 4T    | shift character row (TTRR RRR)
-    rra                 ; 4T   /  to bits 4-3
-    and  $18             ; 7T   mask TT (third bits)
+    rra                 ; 4T    | shift right 3
+    rra                 ; 4T   /
+    and  $18             ; 7T   mask Y:4-3 (third bits)
     or   h              ; 4T   H = 010 TT SSS
     ld   h, a           ; 4T
+    ld   a, b           ; 4T   A = Y again
+    and  $38             ; 7T   mask Y:5-3 (character row within third)
+    rlca                ; 4T   \  rotate left 2 to get
+    rlca                ; 4T   /  Y:5-3 in bits 7-5
+    ld   l, a           ; 4T   L = RRR 00000 (partial)
     ld   a, c           ; 4T   A = X
     rra                 ; 4T   \
     rra                 ; 4T    | X / 8
     rra                 ; 4T   /
     and  $1F             ; 7T   mask to 5-bit column
-    ld   l, a           ; 4T   L = 000 CCCCC
+    or   l              ; 4T   combine row and column
+    ld   l, a           ; 4T   L = RRR CCCCC
 ```
 
 ### DOWN_HL: переміщення на один піксельний рядок вниз
@@ -644,17 +652,17 @@ iterate_screen:
 
 Для рішень у внутрішніх циклах ці порівняння найважливіші:
 
-| Операція | Повільний спосіб | Швидкий спосіб | Виграш |
-|----------|------------------|----------------|--------|
-| Обнулити A | `LD A,0` (7T, 2B) | `XOR A` (4T, 1B) | 3T, 1B |
-| Перевірити A=0 | `CP 0` (7T, 2B) | `OR A` (4T, 1B) | 3T, 1B |
-| Скопіювати 1 байт у пам'ять | `LD (HL),A`+`INC HL` (13T) | `LDI` (16T) | LDI повільніша, але авто-інкрементує і DE теж |
-| Скопіювати N байтів | `LDIR` (21T/байт) | N x `LDI` (16T/байт) | На 24% швидше, коштує 2N байтів коду |
-| Заповнити 2 байти | `LD (HL),A`+`INC HL` x2 (26T) | `PUSH rr` (11T) | На 58% швидше, потребує перехоплення SP |
-| 8-бітний цикл | `DEC B`+`JR NZ` (16T, 3B) | `DJNZ` (13T, 2B) | 3T, 1B на ітерацію |
-| Непрямий виклик | `CALL nn` (17T, 3B) | `RET` через render list (10T, 1B) | 7T, 2B на диспетчеризацію |
-| Обмін регістрів | `LD A,H`+`LD H,D`+`LD D,A` (12T, 3B) | `EX DE,HL` (4T, 1B) | 8T, 2B |
-| Зберегти 6 регістрів | 3 x `PUSH` (33T, 3B) | `EXX` (4T, 1B) | 29T, 2B |
+| Operation | Slow way | Fast way | Savings |
+|-----------|----------|----------|---------|
+| Zero A | `LD A,0` (7T, 2B) | `XOR A` (4T, 1B) | 3T, 1B |
+| Test A=0 | `CP 0` (7T, 2B) | `OR A` (4T, 1B) | 3T, 1B |
+| Copy 1 byte (HL)→(DE) | `LD A,(HL)`+`LD (DE),A`+`INC HL`+`INC DE` (26T, 4B) | `LDI` (16T, 2B) | 10T, 2B per byte |
+| Copy N bytes | `LDIR` (21T/byte) | N x `LDI` (16T/byte) | 24% faster, costs 2N bytes of code |
+| Fill 2 bytes | `LD (HL),A`+`INC HL` x2 (26T) | `PUSH rr` (11T) | 58% faster, needs SP hijack |
+| 8-bit loop | `DEC B`+`JR NZ` (16T, 3B) | `DJNZ` (13T, 2B) | 3T, 1B per iteration |
+| Indirect call | `CALL nn` (17T, 3B) | `RET` via render list (10T, 1B) | 7T, 2B per dispatch |
+| Register swap | `LD A,H`+`LD H,D`+`LD D,A` (12T, 3B) | `EX DE,HL` (4T, 1B) | 8T, 2B |
+| Save 6 registers | 3 x `PUSH` (33T, 3B) | `EXX` (4T, 1B) | 29T, 2B |
 
 ---
 

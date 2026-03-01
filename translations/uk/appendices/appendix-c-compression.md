@@ -44,34 +44,34 @@
 Проходь зверху вниз. Обирай першу гілку, що відповідає твоїй ситуації.
 
 ```
-СТАРТ
+START
   |
-  +-- Це 256-байтне або 512-байтне інтро?
-  |     ТАК --> ZX0 (70-байтний розпаковувач) або свій RLE (<30 байтів)
+  +-- Is this a 256-byte or 512-byte intro?
+  |     YES --> ZX0 (70-byte decompressor) or custom RLE (<30 bytes)
   |
-  +-- Це 1K або 4K інтро?
-  |     ТАК --> ZX0 (найкраще співвідношення ступінь/розмір розпаковувача)
+  +-- Is this a 1K or 4K intro?
+  |     YES --> ZX0 (best ratio-to-decompressor-size)
   |
-  +-- Потрібна потокова розпаковка в реальному часі (розпаковка під час відтворення)?
-  |     ТАК --> LZ4 (~34 T/байт = 2+ КБ за кадр при 50fps)
+  +-- Do you need real-time streaming (decompress during playback)?
+  |     YES --> LZ4 (~34 T/byte = 2+ KB per frame at 50fps)
   |
-  +-- Потрібна швидка розпаковка між сценами?
-  |     ТАК --> MegaLZ fast (~63 T/байт) або Pletter 5 (~69 T/байт)
+  +-- Do you need fast decompression between scenes?
+  |     YES --> MegaLZ fast (~63 T/byte) or Pletter 5 (~69 T/byte)
   |
-  +-- Швидкість розпаковки неважлива (одноразове завантаження при запуску)?
-  |     ТАК --> Exomizer (48,3% ступінь стиснення, нічого кращого немає)
+  +-- Is decompression speed irrelevant (one-time load at startup)?
+  |     YES --> Exomizer (48.3% ratio, nothing beats it)
   |
-  +-- Потрібен хороший баланс ступеню та швидкості?
-  |     ТАК --> ApLib (~105 T/байт, 49,2% ступінь стиснення)
+  +-- Need a good balance of ratio and speed?
+  |     YES --> ApLib (~105 T/byte, 49.2% ratio)
   |
-  +-- Дані переважно серії однакових байтів?
-  |     ТАК --> Свій RLE (розпаковувач < 30 байтів, тривіально)
+  +-- Is the data mostly runs of identical bytes?
+  |     YES --> Custom RLE (decompressor < 30 bytes, trivial)
   |
-  +-- Дані -- послідовні кадри анімації?
-  |     ТАК --> Спочатку дельта-кодування, потім стиснення ZX0 або LZ4
+  +-- Is the data sequential animation frames?
+  |     YES --> Delta-encode first, then compress with ZX0 or LZ4
   |
-  +-- Перший проєкт, хочеш щось просте?
-        ТАК --> Bitbuster або ZX0 (обидва добре документовані, легко інтегруються)
+  +-- First project, want something simple?
+        YES --> Bitbuster or ZX0 (both well-documented, easy to integrate)
 ```
 
 ---
@@ -111,7 +111,7 @@
 
 ## Мінімальний RLE-розпаковувач
 
-Найпростіший корисний пакувальник. Менше 30 байтів. Підходить для 256-байтних інтро або даних з довгими серіями однакових байтів. Дивись Розділ 14 для повного обговорення.
+The simplest useful compressor. Only 12 bytes of code. Suitable for 256-byte intros or data with long runs of identical bytes. See Chapter 14 for a full discussion.
 
 ```z80
 ; Minimal RLE decompressor
@@ -131,8 +131,9 @@ rle_decompress:
         inc     de              ;                         6T
         djnz    .fill           ; loop B times            13T/8T
         jr      rle_decompress  ; next pair               12T
-; Total: 23 bytes of code
-; Speed: ~26 T-states per output byte (within runs)
+; Total: 12 bytes of code
+; Speed: ~26 T-states per output byte (within long runs)
+;        + 46T overhead per [count, value] pair
 ```
 
 **Інструмент кодування** (однорядник на Python для простого RLE):
@@ -153,6 +154,8 @@ def rle_encode(data):
 ```
 
 Цей наївний RLE розширює дані без серій (найгірший випадок: 2 байти на 1 байт вхідних даних). Для змішаних даних використовуй RLE з ескейп-байтом: спеціальний байт сигналізує серію, а всі інші байти -- літерали. Або просто використовуй ZX0.
+
+**Transposition trick.** RLE benefits dramatically from column-major data layout. If you have a 32×24 attribute block where each row varies but columns are often constant, transposing the data (storing all column 0 values, then column 1, etc.) creates long runs that RLE compresses well. The trade-off: the Z80 must un-transpose the data after decompression, which costs an extra pass (~13 T-states per byte for a simple nested-loop copy). Count the total cost (decompressor code + un-transpose code + compressed data) against ZX0 (decompressor + compressed data, no transform needed) to see which wins for your specific data.
 
 ---
 

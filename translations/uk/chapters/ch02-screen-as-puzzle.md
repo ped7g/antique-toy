@@ -13,9 +13,9 @@
 
 Дисплей Spectrum займає фіксовану область пам'яті:
 
-```
-$4000 - $57FF    Піксельні дані     6 144 байти   (256 x 192 пікселі, 1 біт на піксель)
-$5800 - $5AFF    Атрибути              768 байтів  (32 x 24 клітинки кольорів)
+```text
+$4000 - $57FF    Pixel data      6,144 bytes   (256 x 192 pixels, 1 bit per pixel)
+$5800 - $5AFF    Attributes        768 bytes   (32 x 24 colour cells)
 ```
 
 Піксельна область містить бітову карту: 256 пікселів по горизонталі, упаковані по 8 на байт, що дає 32 байти на рядок. З 192 рядками маємо 32 x 192 = 6 144 байти. Кожен байт представляє 8 горизонтальних пікселів, де біт 7 — крайній лівий, а біт 0 — крайній правий.
@@ -24,7 +24,8 @@ $5800 - $5AFF    Атрибути              768 байтів  (32 x 24 клі
 
 Разом: 6 144 + 768 = 6 912 байтів. Це весь дисплей.
 
-![Розкладка екранної пам'яті ZX Spectrum із третинами, символьними клітинками та областю атрибутів](illustrations/output/ch02_screen_layout.png)
+<!-- figure: ch02_screen_layout -->
+![ZX Spectrum screen memory layout with thirds, character cells, and attribute area](illustrations/output/ch02_screen_layout.png)
 
 Піксельні дані та дані атрибутів виконують різні функції, але тісно пов'язані. Кожен піксельний байт контролює 8 точок на екрані; байт атрибутів для відповідної клітинки 8x8 контролює, якого кольору ці точки будуть. Зміни піксель — і ти змінюєш форму. Зміни атрибут — і ти змінюєш колір. Але змінити колір можна лише для цілого блоку 8x8 — не для окремого пікселя. Це і є "конфлікт атрибутів", що визначає візуальний характер Spectrum, і ми повернемося до нього незабаром.
 
@@ -40,7 +41,7 @@ $5800 - $5AFF    Атрибути              768 байтів  (32 x 24 клі
 
 Екран поділений на три **третини**, кожна по 64 піксельних рядки заввишки. Усередині кожної третини рядки переплетені за символьними рядками. Ось де фактично розташовані перші 16 рядків:
 
-```
+```text
 Row  0:  $4000     Third 0, char row 0, scan line 0
 Row  1:  $4100     Third 0, char row 0, scan line 1
 Row  2:  $4200     Third 0, char row 0, scan line 2
@@ -63,7 +64,7 @@ Row 15:  $4720     Third 0, char row 1, scan line 7
 
 Ось повна картина для верхньої третини екрану:
 
-```
+```text
 Char row 0:   scan lines at $4000, $4100, $4200, $4300, $4400, $4500, $4600, $4700
 Char row 1:   scan lines at $4020, $4120, $4220, $4320, $4420, $4520, $4620, $4720
 Char row 2:   scan lines at $4040, $4140, $4240, $4340, $4440, $4540, $4640, $4740
@@ -90,9 +91,11 @@ Char row 7:   scan lines at $40E0, $41E0, $42E0, $43E0, $44E0, $45E0, $46E0, $47
 
 ## Бітова розкладка: Декодування (x, y) в адресу
 
+![ZX Spectrum screen memory layout — interleaved thirds with colour-coded address bit mapping](../../build/screenshots/proto_ch02_screen_layout.png)
+
 Щоб точно зрозуміти черезрядковість, подивись, як координата Y відображається у 16-бітну екранну адресу. Розглянемо піксель у стовпці `x` (0–255) та рядку `y` (0–191). Байт, що містить цей піксель, знаходиться за адресою:
 
-```
+```text
 High byte:  0 1 0 T T S S S
 Low byte:   L L L C C C C C
 ```
@@ -107,7 +110,7 @@ Low byte:   L L L C C C C C
 
 Візуалізуймо це на конкретному прикладі. Піксель (80, 100):
 
-```
+```text
 x = 80:     column byte = 80 / 8 = 10      CCCCC = 01010
 y = 100:    binary = 01100100
             TT  = 01       (third 1, the middle third)
@@ -126,7 +129,7 @@ Address: $4C8A
 
 Перетворення (x, y) в екранну адресу — це те, що потрібно робити швидко й часто. Ось стандартна процедура:
 
-```z80
+```z80 id:ch02_the_address_calculation_in
 ; Input:  B = y (0-191), C = x (0-255)
 ; Output: HL = screen address, A = bit mask
 ;
@@ -163,6 +166,8 @@ pixel_addr:
 
 91 такт — це не дешево. У щільному внутрішньому циклі, що обробляє тисячі пікселів, ти б не викликав цю процедуру для кожного пікселя. Натомість ти обчислюєш початкову адресу один раз, а потім переміщуєшся по екрану за допомогою швидкої маніпуляції вказівниками — що підводить нас до найважливішої процедури в графічному програмуванні Spectrum.
 
+![Pixel plotting demo — individual pixels placed on screen using the address calculation routine](../../build/screenshots/ch02_pixel_demo.png)
+
 ---
 
 ## DOWN_HL: Переміщення на один піксельний рядок униз
@@ -181,7 +186,7 @@ pixel_addr:
 
 Класична процедура обробляє всі три випадки:
 
-```z80
+```z80 id:ch02_downhl_moving_one_pixel_row
 ; DOWN_HL: move HL one pixel row down on the Spectrum screen
 ; Input:  HL = current screen address
 ; Output: HL = screen address one row below
@@ -190,14 +195,14 @@ down_hl:
     inc  h             ; 4T   try moving one scan line down
     ld   a, h          ; 4T
     and  7             ; 7T   did we cross a character boundary?
-    ret  nz            ; 11T  (5T if taken) no: done
+    ret  nz            ; 11/5T  no: done
 
     ; Crossed a character cell boundary.
     ; Reset scan line to 0, advance character row.
     ld   a, l          ; 4T
     add  a, 32         ; 7T   next character row (L += 32)
     ld   l, a          ; 4T
-    ret  c             ; 11T  (5T if taken) if carry, we crossed into next third
+    ret  c             ; 11/5T  if carry, we crossed into next third
 
     ; No carry from L, but we need to undo the H increment
     ; that moved us into the wrong third.
@@ -209,25 +214,25 @@ down_hl:
 
 Ця процедура займає різну кількість часу залежно від того, який випадок спрацьовує:
 
-| Випадок | Частота | Такти |
+| Case | Frequency | T-states |
 |------|-----------|----------|
-| У межах символьної клітинки | 7 з 8 рядків | 4 + 4 + 7 + 5 = **20** |
-| Межа клітинки, та сама третина | 6 з 64 рядків | 4 + 4 + 7 + 11 + 4 + 7 + 4 + 11 + 4 + 7 + 4 + 10 = **77** |
-| Межа третини | 2 з 192 рядків | 4 + 4 + 7 + 11 + 4 + 7 + 4 + 5 = **46** |
+| Within a character cell | 7 out of 8 rows | 4 + 4 + 7 + 11 = **26** |
+| Character boundary, same third | 7 out of 64 rows | 4 + 4 + 7 + 5 + 4 + 7 + 4 + 5 + 4 + 7 + 4 + 10 = **65** |
+| Third boundary | 2 out of 192 rows | 4 + 4 + 7 + 5 + 4 + 7 + 4 + 11 = **46** |
 
-Типовий випадок — перебування в межах символьної клітинки — швидкий: 20 тактів. Але нетиповий випадок (перетин межі символьного рядка в тій самій третині) повільний: 77 тактів. Усереднено по всіх 192 рядках, вартість становить приблизно **24,6 такти за виклик**.
+The common case -- staying within a character cell -- is fast: 26 T-states (a conditional RET that fires costs 11T, not 5T). The uncommon case (crossing a character row boundary within the same third) is 65 T-states. Averaged over all 192 rows, the cost works out to about **30.5 T-states per call**.
 
-Це середнє значення приховує проблему. Якщо ти ітеруєш по всьому екрану й викликаєш DOWN_HL на кожному рядку, ті випадкові виклики по 77 тактів створюють непередбачувані сплески часу на рядок. Для демо-ефекту, якому потрібен сталий тайминг на рядок розгортки, таке тремтіння неприйнятне.
+That average hides a problem. If you are iterating down the full screen and calling DOWN_HL on every row, those occasional 65-T-state calls spike your per-line timing unpredictably. For a demo effect that needs consistent timing per scanline, this jitter is unacceptable.
 
 ### Оптимізація Introspec'а
 
 У грудні 2020 року Introspec (spke) опублікував на Hype детальний аналіз під назвою "Eshchyo raz pro DOWN_HL" (Ще раз про DOWN_HL). Стаття досліджувала проблему ефективної ітерації по всьому екрану вниз — не лише вартість одного виклику, а загальну вартість переміщення HL через усі 192 рядки.
 
-Наївний підхід — виклик класичного DOWN_HL 191 раз — коштує **5 922 такти** для повного обходу екрану. Мета Introspec'а полягала в тому, щоб знайти найшвидший спосіб пройти через усі 192 рядки, відвідуючи кожну екранну адресу в порядку зверху вниз.
+The naive approach -- calling the classic DOWN_HL routine 191 times -- costs **5,825 T-states** for a full screen traversal. Introspec's goal was to find the fastest way to iterate through all 192 rows, visiting every screen address in top-to-bottom order.
 
 Його ключове прозріння полягало у використанні **роздільних лічильників**. Замість перевірки бітів адреси після кожного інкремента для виявлення перетину меж, він структурував цикл відповідно до триступеневої ієрархії екрану:
 
-```
+```text id:ch02_introspec_s_optimisation
 For each third (3 iterations):
     For each character row within the third (8 iterations):
         For each scan line within the character cell (8 iterations):
@@ -247,7 +252,7 @@ For each third (3 iterations):
 
 Ось спрощена версія підходу з роздільними лічильниками:
 
-```z80
+```z80 id:ch02_introspec_s_optimisation_2
 ; Iterate all 192 screen rows using split counters
 ; HL = $4000 at entry (top-left of screen)
 ;
@@ -294,44 +299,43 @@ iterate_screen:
 
 Кожен байт атрибутів має таку структуру:
 
-```
+```text
   Bit:   7     6     5  4  3     2  1  0
        +-----+-----+--------+--------+
        |  F  |  B  | PAPER  |  INK   |
        +-----+-----+--------+--------+
 
-  F       = Flash (0 = вимкнено, 1 = мерехтіння з частотою ~1,6 Гц)
-  B       = Bright (0 = нормальний, 1 = яскравий)
-  PAPER   = Колір фону (0-7)
-  INK     = Колір переднього плану (0-7)
+  F       = Flash (0 = off, 1 = flashing at ~1.6 Hz)
+  B       = Bright (0 = normal, 1 = bright)
+  PAPER   = Background colour (0-7)
+  INK     = Foreground colour (0-7)
 ```
 
 3-бітні коди кольорів відповідають:
 
-```
-  0 = Чорний       4 = Зелений
-  1 = Синій         5 = Блакитний
-  2 = Червоний      6 = Жовтий
-  3 = Пурпурний     7 = Білий
+```text
+  0 = Black       4 = Green
+  1 = Blue        5 = Cyan
+  2 = Red         6 = Yellow
+  3 = Magenta     7 = White
 ```
 
 З бітом BRIGHT кожен колір має нормальний і яскравий варіант. Чорний залишається чорним незалежно від яскравості, тому загальна палітра — 15 окремих кольорів:
 
-```
+```text
 Normal:  Black  Blue  Red  Magenta  Green  Cyan  Yellow  White
 Bright:  Black  Blue  Red  Magenta  Green  Cyan  Yellow  White
-                (яскравіші версії кожного)
+                (brighter versions of each)
 ```
 
-![Бітова структура байта атрибутів, що показує поля flash, bright, paper та ink](illustrations/output/ch02_attr_byte.png)
+<!-- figure: ch02_attr_byte -->
+![Attribute byte bit layout showing flash, bright, paper, and ink fields](illustrations/output/ch02_attr_byte.png)
 
-Байт атрибутів `$47` означає: мерехтіння вимкнено, яскравість вимкнена, paper = 0 (чорний), ink = 7 (білий). Білий текст на чорному тлі — стандарт Spectrum. Яскрава версія була б `$C7`: `$47` OR `$40` встановлює біт яскравості.
-
-Зачекай — це неправильно. Перечитаймо бітову розкладку. Біт 6 — яскравість, тому яскравий білий на чорному — це `$47` з встановленим бітом 6: `$47 | $40 = $47`. Ні, `$47` вже є `01000111`. Біт 7 — мерехтіння, біт 6 — яскравість. Отже `$47` = мерехтіння вимкнено, яскравість **увімкнена**, paper 000, ink 111 = яскравий білий на чорному. Версія без яскравості — `$07`.
+An attribute byte of `$47` = `01000111`: flash off (bit 7 = 0), bright **on** (bit 6 = 1), paper = 000 (black), ink = 111 (white). Bright white text on a black background. The non-bright version is `$07` = `00000111` -- the Spectrum's default after `BORDER 0: PAPER 0: INK 7`.
 
 Такі бітові деталі мають значення, коли ти конструюєш значення атрибутів на швидкості. Поширений патерн:
 
-```z80
+```z80 id:ch02_attribute_memory_768_bytes_4
 ; Build an attribute byte: bright white ink on blue paper
 ; Bright = 1, Paper = 001 (blue), Ink = 111 (white)
 ; = 01 001 111 = $4F
@@ -344,7 +348,7 @@ Bright:  Black  Blue  Red  Magenta  Green  Cyan  Yellow  White
 
 Це означає, що якщо червоний спрайт перетинається із зеленим фоном, клітинка 8x8, що містить перетин, мусить вибрати: всі встановлені пікселі в цій клітинці або червоні, або зелені. Ти не можеш мати частину червоних і частину зелених встановлених пікселів у тій самій клітинці. Візуальний результат — різкий блок кольору, що "конфліктує" з оточенням — сумнозвісний конфлікт атрибутів.
 
-```
+```text
 Without clash (hypothetical per-pixel colour):
 
   +---------+---------+
@@ -378,7 +382,7 @@ With attribute clash (Spectrum reality):
 
 Піксельна область 256x192 розташована в центрі екрану, оточена широким бордюром. Колір бордюру встановлюється записом у порт `$FE`:
 
-```z80
+```z80 id:ch02_the_border_more_than
     ld   a, 1          ; 7T   blue = colour 1
     out  ($FE), a       ; 11T  set border colour
 ```
@@ -393,7 +397,7 @@ With attribute clash (Spectrum reality):
 
 Базовий принцип: ULA малює один рядок розгортки кожні 224 такти (на Pentagon). Якщо ти виконаєш інструкцію `OUT ($FE), A` в потрібний момент, ти зміниш колір бордюру у конкретній горизонтальній позиції на поточному рядку розгортки. Виконуючи швидку послідовність інструкцій `OUT` з різними значеннями кольору, можна малювати горизонтальні смуги кольору на бордюрі.
 
-```z80
+```z80 id:ch02_border_effects
 ; Simple border stripes
 ; Assumes we are synced to the start of a border scanline
 
@@ -419,7 +423,7 @@ With attribute clash (Spectrum reality):
 
 Приклад у `chapters/ch02-screen-as-puzzle/examples/fill_screen.a80` заповнює піксельну область шаховим візерунком, а атрибути — яскравим білим на синьому. Розберімо його по секціях.
 
-```z80
+```z80 id:ch02_practical_the_checkerboard
     ORG $8000
 
 SCREEN  EQU $4000       ; pixel area start
@@ -430,7 +434,7 @@ ATTLEN  EQU 768         ; attribute bytes (32*24)
 
 Код розміщений за адресою `$8000` — безпечно в неспірній пам'яті на всіх моделях Spectrum. Константи іменують ключові адреси та розміри.
 
-```z80
+```z80 id:ch02_practical_the_checkerboard_2
 start:
     ; --- Fill pixels with checkerboard pattern ---
     ld   hl, SCREEN
@@ -442,9 +446,9 @@ start:
 
 Тут використовується класичний трюк самокопіювання LDIR. Він записує `$55` (двійкове `01010101`) у перший байт за адресою `$4000`, потім копіює кожен байт у наступний для 6 143 байтів. Результат: кожен байт піксельної області — `$55`, що дає чергування встановлених і скинутих пікселів — шахматку. Оскільки візерунок однаковий у кожному байті, черезрядковий порядок рядків не має значення — кожен рядок отримує той самий візерунок незалежно.
 
-Вартість: `LDIR` по 21 такт на байт x 6 143 + 16 за останній байт = 129 019 тактів. Майже два повних кадри на Pentagon. Це прийнятно для одноразового налаштування, але ти ніколи б не робив це у покадровому циклі рендерингу.
+Cost: `LDIR` copies 6,143 bytes. The last iteration costs 16T, all others 21T: (6,143 - 1) x 21 + 16 = 128,998 T-states. Nearly two full frames on a Pentagon. This is fine for a one-time setup, but you would never do this in a per-frame rendering loop.
 
-```z80
+```z80 id:ch02_practical_the_checkerboard_3
     ; --- Fill attributes: white ink on blue paper ---
     ; Attribute byte: flash=0, bright=1, paper=001 (blue), ink=111 (white)
     ; = 01 001 111 = $4F
@@ -457,9 +461,9 @@ start:
 
 Та сама техніка для атрибутів. Значення `$4F` декодується як: мерехтіння вимкнено (0), яскравість увімкнена (1), paper синій (001), ink білий (111). Кожна клітинка 8x8 отримує яскравий білий ink на синьому paper. Шахові пікселі встановлені/скинуті, тому ти бачиш чергування білих і синіх точок — класичний візуальний патерн ZX Spectrum.
 
-Вартість: 768 байтів x 21 + останній байт по 16 = 16 143 такти.
+Cost: `LDIR` copies 767 bytes -- (767 - 1) x 21 + 16 = 16,102 T-states.
 
-```z80
+```z80 id:ch02_practical_the_checkerboard_4
     ; --- Border: blue ---
     ld   a, 1
     out  ($FE), a
@@ -471,6 +475,8 @@ start:
 ```
 
 Встановлює бордюр у синій (колір 1), щоб відповідати кольору paper, створюючи візуально чисту рамку. Потім крутиться нескінченно, зупиняючись між кадрами. `HALT` чекає на наступне масковане переривання, яке генерується раз на кадр — це серцебиття простою кожної програми Spectrum.
+
+![Screen fill with alternating bytes — checkerboard pattern in bright white on blue](../../build/screenshots/ch02_fill_screen.png)
 
 ### Що спробувати
 
@@ -489,7 +495,7 @@ start:
 
 ### Переміщення вправо на один байт (8 пікселів)
 
-```z80
+```z80 id:ch02_moving_right_one_byte_8
     inc  l             ; 4T
 ```
 
@@ -497,7 +503,7 @@ start:
 
 ### Переміщення на один піксельний рядок униз
 
-```z80
+```z80 id:ch02_moving_down_one_pixel_row
     inc  h             ; 4T    (within a character cell)
 ```
 
@@ -505,7 +511,7 @@ start:
 
 ### Переміщення на один символьний рядок униз (8 пікселів)
 
-```z80
+```z80 id:ch02_moving_down_one_character_row
     ld   a, l          ; 4T
     add  a, 32         ; 7T
     ld   l, a          ; 4T    total: 15T (if no third crossing)
@@ -515,13 +521,13 @@ start:
 
 ### Переміщення на один піксельний рядок угору
 
-```z80
+```z80 id:ch02_moving_up_one_pixel_row
     dec  h             ; 4T    (within a character cell)
 ```
 
 Зворотне до `INC H`. Ті самі проблеми з межами символьних клітинок і третин. Ось повна процедура UP_HL, дзеркало DOWN_HL:
 
-```z80
+```z80 id:ch02_moving_up_one_pixel_row_2
 ; UP_HL: move HL one pixel row up on the Spectrum screen
 ; Input:  HL = current screen address
 ; Output: HL = screen address one row above
@@ -532,13 +538,13 @@ up_hl:
     ld   a, h          ; 4T
     and  7             ; 7T   did we cross a character boundary?
     cp   7             ; 7T
-    ret  nz            ; 11T  (5T if taken) no: done
+    ret  nz            ; 11/5T  no: done
 
     ; Crossed a character cell boundary upward.
     ld   a, l          ; 4T
     sub  32            ; 7T   previous character row (L -= 32)
     ld   l, a          ; 4T
-    ret  c             ; 11T  (5T if taken) if carry, crossed into prev third
+    ret  c             ; 11/5T  if carry, crossed into prev third
 
     ld   a, h          ; 4T
     add  a, 8          ; 7T   compensate H
@@ -546,9 +552,9 @@ up_hl:
     ret                ; 10T
 ```
 
-Є тонка оптимізація, запропонована Art-top (Артем Топчій): заміна `and 7 / cp 7` на `cpl / and 7`. Після `DEC H`, якщо молодші 3 біти H перекинулися з `000` на `111`, ми перетнули межу символьної клітинки. Класичний тест перевіряє `AND 7`, потім порівнює з 7. Оптимізована версія спочатку інвертує: якщо біти `111`, CPL робить їх `000`, і `AND 7` дає нуль. Це економить 1 байт і 3 такти на шляху перетину межі:
+There is a subtle optimisation here, contributed by Art-top (Artem Topchiy): replacing `and 7 / cp 7` with `cpl / and 7`. After `DEC H`, if the low 3 bits of H wrapped from `000` to `111`, we crossed a character boundary. The classic test checks `AND 7` then compares with 7. The optimised version complements first: if the bits are `111`, CPL makes them `000`, and `AND 7` gives zero. This saves 1 byte and 3 T-states in the boundary-crossing path:
 
-```z80
+```z80 id:ch02_moving_up_one_pixel_row_3
 ; UP_HL optimised (Art-top)
 ; Saves 1 byte, 3 T-states on boundary crossing
 ;
@@ -557,12 +563,12 @@ up_hl_opt:
     ld   a, h          ; 4T
     cpl                ; 4T   complement: 111 -> 000
     and  7             ; 7T   zero if we crossed boundary
-    ret  nz            ; 11T  (5T if taken)
+    ret  nz            ; 11/5T
 
     ld   a, l          ; 4T
     sub  32            ; 7T
     ld   l, a          ; 4T
-    ret  c             ; 11T  (5T if taken)
+    ret  c             ; 11/5T
 
     ld   a, h          ; 4T
     add  a, 8          ; 7T
@@ -574,102 +580,9 @@ up_hl_opt:
 
 ### Обчислення адреси атрибутів з піксельної адреси
 
-Якщо HL вказує на байт у піксельній області, відповідну адресу атрибутів можна обчислити:
+If HL points to a byte in the pixel area, the corresponding attribute address can be calculated. Recall the pixel address structure: H = `010TTSSS`, L = `LLLCCCCC`. The attribute address for the same character cell is `$5800 + TT * 256 + LLL * 32 + CCCCC`. Since L already encodes `LLL * 32 + CCCCC` (which ranges 0--255), the attribute address is simply `($58 + TT) : L`. All we need to do is extract the two TT bits from H, combine them with `$58`, and leave L unchanged:
 
-```z80
-; Input:  HL = pixel address ($4000-$57FF)
-; Output: HL = attribute address ($5800-$5AFF)
-;
-pixel_to_attr:
-    ld   a, h          ; 4T
-    rrca               ; 4T   \
-    rrca               ; 4T    | shift bits 5-3 of H (TT, top LLL bit)
-    rrca               ; 4T   /  down to bits 2-0
-    and  3             ; 7T   keep only the third bits
-    or   $58           ; 7T   add attribute base
-    ld   h, a          ; 4T
-                       ; L is already correct (column + char row)
-    ; Total: ~34 T-states
-```
-
-Зачекай — це не зовсім правильно. Піксельна адреса має структуру `010 TT SSS` у H та `LLL CCCCC` у L. Адреса атрибутів потребує `01011 TT L` у H та `LL CCCCC` у L. Насправді адреса атрибутів — це просто `$5800 + (третина * 256) + (символьний_рядок * 32) + стовпець`. Переробимо правильно.
-
-Атрибут для символьної клітинки у стовпці C, рядку R (де R = 0–23) знаходиться за адресою `$5800 + R * 32 + C`. Маючи піксельну адресу в HL, нам потрібно витягти символьний рядок (0–23) та стовпець (0–31). Символьний рядок — це `третина * 8 + символьний_рядок_у_третині`:
-
-```z80
-; Input:  HL = pixel address ($4000-$57FF)
-; Output: DE = attribute address ($5800-$5AFF)
-;         Preserves HL
-;
-pixel_to_attr:
-    ld   a, h          ; 4T   H = 010 TT SSS
-    and  $18           ; 7T   mask TT bits -> 000 TT 000
-    rrca               ; 4T   \
-    rrca               ; 4T    | shift to get 00000 TT 0
-    rrca               ; 4T   /
-    or   $58           ; 7T   add $58 -> 01011 TT 0  (almost)
-    ; Hmm, we also need LLL from L.
-```
-
-На практиці точне формулювання залежить від того, що тобі потрібно. Найпростіший підхід використовує факт, що область атрибутів лінійна:
-
-```z80
-; Pixel address HL -> attribute address HL
-; H = 010 TT SSS, L = LLL CCCCC
-;
-; Attribute H should be: 0101 1 TT L(bit 7)
-; Attribute L should be: LL CCCCC
-;
-; Discard SSS entirely (scan line is irrelevant for attributes).
-
-    ld   a, h          ; 4T
-    rra                ; 4T
-    rra                ; 4T
-    rra                ; 4T   A = scan(2:0) 010 TT => SSS 010 TT
-    and  $03           ; 7T   A = 000000 TT
-    or   $58           ; 7T   A = 01011 0 TT
-    ld   h, a          ; 4T
-
-    ld   a, l          ; 4T
-    rra                ; 4T
-    rra                ; 4T
-    rra                ; 4T   rotate LLL CCCCC => CCC CCLLL
-    ; That's not right either.
-```
-
-Наведімо стандартну загальновідому версію замість неправильного виведення:
-
-```z80
-; Convert pixel address in HL to attribute address in HL
-; Standard method
-;
-    ld   a, h          ; 4T   H = 010TTSSS
-    rrca               ; 4T   \
-    rrca               ; 4T    | rotate right 3 times
-    rrca               ; 4T   /  A = SSS010TT
-    and  $03           ; 7T   A = 000000TT
-    or   $58           ; 7T   A = 010110TT
-    ld   h, a          ; 4T   H now has the third
-
-    ; L = LLLCCCCC -- already contains char row (LLL) and column (CCCCC)
-    ; But we need to combine with TT from H.
-    ; Actually, the attribute address is $5800 + TT*$100 + L
-    ; Wait -- there are only 256 bytes per third in attributes,
-    ; and L already encodes LLL*32 + CCCCC, which ranges 0-255.
-    ; So the attribute address is simply ($58 + TT) : L.
-    ; But TT goes 0,1,2 and attributes go $5800, $5900, $5A00.
-    ; So H = $58 | TT is wrong -- it should be $58 + TT.
-    ; $58 + 0 = $58, $58 + 1 = $59, $58 + 2 = $5A. That works.
-    ; And OR with $58 when TT is in bits 0-1 gives:
-    ;   $58 | 0 = $58, $58 | 1 = $59, $58 | 2 = $5A. Correct!
-
-    ; L stays unchanged. Done.
-    ; Total: 34 T-states
-```
-
-Отже, остаточна чиста версія:
-
-```z80
+```z80 id:ch02_computing_the_attribute
 ; Convert pixel address in HL to attribute address in HL
 ; Input:  HL = pixel address ($4000-$57FF)
 ; Output: HL = corresponding attribute address ($5800-$5AFF)
@@ -686,9 +599,9 @@ pixel_to_attr:
 
 Це працює, бо L вже містить `LLL CCCCC` — символьний рядок у межах третини (0–7), скомбінований зі стовпцем (0–31) — і це саме молодший байт адреси атрибутів. Старший байт просто потребує номер третини, доданий до `$58`. Елегантно.
 
-**Особливий випадок: коли біти рядка розгортки H = 111.** Якщо ти ітеруєш через символьну клітинку зверху вниз і щойно обробив останній рядок розгортки (рядок 7), молодші 3 біти H дорівнюють `111`. У цьому випадку є швидше 4-інструкційне перетворення, запропоноване Art-top:
+**Special case: when H has scanline bits = 111.** If you are iterating through a character cell top-to-bottom and have just processed the last scanline (scanline 7), the low 3 bits of H are `111`. In this case there is a faster 4-instruction conversion, contributed by Art-top:
 
-```z80
+```z80 id:ch02_computing_the_attribute_2
 ; Pixel-to-attribute when H low bits are %111
 ; (e.g., after processing the last scanline of a character cell)
 ; Input:  HL where H = 010TT111
@@ -705,20 +618,20 @@ pixel_to_attr:
 
 ---
 
-> **Бічна панель: Agon Light 2**
+> **Agon Light 2 Sidebar**
 >
-> Дисплеєм Agon Light 2 керує VDP (Video Display Processor) — мікроконтролер ESP32, що працює з бібліотекою FabGL. Процесор eZ80 комунікує з VDP через послідовний канал, надсилаючи команди для встановлення графічних режимів, малювання пікселів, визначення спрайтів та керування палітрами.
+> The Agon Light 2's display is managed by a VDP (Video Display Processor) -- an ESP32 microcontroller running the FabGL library. The eZ80 CPU communicates with the VDP over a serial link, sending commands to set graphics modes, draw pixels, define sprites, and manage palettes.
 >
-> Тут немає черезрядкової розкладки пам'яті. Немає конфлікту атрибутів. VDP підтримує кілька бітмапних режимів з різними роздільностями (від 640x480 до 320x240 і нижче), з 64 кольорами або повними RGBA-палітрами залежно від режиму. Апаратні спрайти (до 256) та тайлові карти підтримуються нативно.
+> There is no interleaved memory layout. There is no attribute clash. The VDP supports multiple bitmap modes at various resolutions (from 640x480 down to 320x240 and below), with 64 colours or full RGBA palettes depending on the mode. Hardware sprites (up to 256) and tile maps are supported natively.
 >
-> Що змінюється для програміста:
+> What changes for the programmer:
 >
-> - **Немає адресної головоломки.** Піксельні координати лінійно відображаються на позиції в буфері. Тобі не потрібні DOWN_HL чи обхід екрану з роздільними лічильниками.
-> - **Немає конфлікту атрибутів.** Кожен піксель може бути будь-якого кольору. Обмеження сітки 8x8 не існує.
-> - **Немає прямого доступу до фреймбуфера.** Процесор не може писати безпосередньо у відеопам'ять так, як процесор Spectrum пише за адресою `$4000`. Натомість ти надсилаєш команди VDP через послідовний канал. Намалювати піксель означає надіслати послідовність команд, а не зберегти байт. Це вносить затримку — послідовний канал працює на швидкості 1 152 000 бод — але це також означає, що процесор вільний під час рендерингу.
-> - **Немає трюків з точністю до такту на бордюрі.** VDP обробляє тайминг дисплея незалежно. Ти не можеш створювати растрові ефекти розраховуючи час інструкцій `OUT`, бо конвеєр дисплея відв'язаний від годинника процесора.
+> - **No address puzzle.** Pixel coordinates map linearly to buffer positions. You do not need DOWN_HL or split-counter screen traversal.
+> - **No attribute clash.** Each pixel can be any colour. The 8x8 grid constraint does not exist.
+> - **No direct memory access to the framebuffer.** The CPU cannot write directly to video memory the way a Spectrum CPU writes to `$4000`. Instead, you send VDP commands over the serial link. Drawing a pixel means sending a command sequence, not storing a byte. This introduces latency -- the serial link runs at 1,152,000 baud -- but it also means the CPU is free during rendering.
+> - **No cycle-level border tricks.** The VDP handles display timing independently. You cannot create raster effects by timing `OUT` instructions, because the display pipeline is decoupled from the CPU clock.
 >
-> Для програміста Spectrum Agon відчувається водночас визвольним і фрустраційним. Обмеження, що примушували до творчих рішень на Spectrum, просто не існують — але й трюки з прямим доступом до заліза, які ці обмеження уможливлювали, теж не існують. Ти обмінюєш головоломку на API.
+> For a Spectrum programmer, the Agon feels freeing and frustrating in equal measure. The constraints that forced creative solutions on the Spectrum simply do not exist -- but neither do the direct-hardware tricks that those constraints enabled. You trade the puzzle for an API.
 
 ---
 
@@ -738,14 +651,14 @@ pixel_to_attr:
 
 ## Підсумок
 
-- 6 912-байтний дисплей Spectrum складається з **6 144 байтів піксельних даних** за адресами `$4000`–`$57FF` та **768 байтів атрибутів** за адресами `$5800`–`$5AFF`.
-- Піксельні рядки **черезрядкові**: адреса кодує y як `010 TT SSS` (старший байт) та `LLL CCCCC` (молодший байт), де біти y перемішані по адресі.
-- Переміщення **на один піксельний рядок униз** у межах символьної клітинки — це просто `INC H` (4 такти). Перетин меж символьних клітинок і третин вимагає додаткової логіки.
-- Класична процедура **DOWN_HL** обробляє всі випадки, але коштує до 77 тактів на межах. Для повноекранної ітерації **цикли з роздільними лічильниками** (підхід Introspec'а) зменшують загальну вартість на 60% і усувають тремтіння таймінгу.
-- Кожен байт атрибутів кодує **Flash, Bright, Paper та Ink** у форматі `FBPPPIII`. Лише **два кольори на клітинку 8x8** — це конфлікт атрибутів.
-- Конфлікт атрибутів — не лише обмеження, а **творче обмеження**, що визначило візуальну естетику Spectrum і привело до ефективних демо-ефектів, що працюють лише з атрибутами.
-- Колір **бордюру** встановлюється через `OUT ($FE), A` (біти 0–2), і зміни видимі на наступному рядку розгортки, що робить його **інструментом зневадження таймінгу** та полотном для растрових ефектів демосцени.
-- **Agon Light 2** не має черезрядкової розкладки, конфлікту атрибутів і прямого доступу до фреймбуфера — він замінює головоломку на API команд VDP.
+- The Spectrum's 6,912-byte display consists of **6,144 bytes of pixel data** at `$4000`--`$57FF` and **768 bytes of attributes** at `$5800`--`$5AFF`.
+- Pixel rows are **interleaved** by character cell: the address encodes y as `010 TT SSS` (high byte) and `LLL CCCCC` (low byte), where the bits of y are shuffled across the address.
+- Moving **one pixel row down** within a character cell is just `INC H` (4 T-states). Crossing character and third boundaries requires additional logic.
+- The classic **DOWN_HL** routine handles all cases but costs up to 65 T-states at boundaries. For full-screen iteration, **split-counter loops** (Introspec's approach) reduce total cost by 60% and eliminate timing jitter.
+- Each attribute byte encodes **Flash, Bright, Paper, and Ink** in the format `FBPPPIII`. Only **two colours per 8x8 cell** -- this is the attribute clash.
+- Attribute clash is not just a limitation but a **creative constraint** that defined the Spectrum's visual aesthetic and led to efficient attribute-only demo effects.
+- The **border** colour is set by `OUT ($FE), A` (bits 0--2) and changes are visible on the next scanline, making it a **timing debug tool** and a canvas for demoscene raster effects.
+- The **Agon Light 2** has no interleaved layout, no attribute clash, and no direct framebuffer access -- it replaces the puzzle with a VDP command API.
 
 ---
 
@@ -763,6 +676,6 @@ pixel_to_attr:
 
 ---
 
-> **Джерела:** Introspec "Eshchyo raz pro DOWN_HL" (Hype, 2020); Introspec "GO WEST Part 1" (Hype, 2015) про вплив спірної пам'яті на екранні адреси; Introspec "Making of Eager" (Hype, 2015) про дизайн ефектів на базі атрибутів; документація ULA Spectrum про обґрунтування розкладки пам'яті; Art-top (особиста комунікація, 2026) за оптимізовану UP_HL та швидке перетворення піксельної адреси в адресу атрибутів.
+> **Sources:** Introspec "Eshchyo raz pro DOWN_HL" (Hype, 2020); Introspec "GO WEST Part 1" (Hype, 2015) for contended memory effects at screen addresses; Introspec "Making of Eager" (Hype, 2015) for attribute-based effect design; the Spectrum's ULA documentation for memory layout rationale; Art-top (personal communication, 2026) for the optimised UP_HL and fast pixel-to-attribute conversion.
 
 *Далі: Розділ 3 — Інструментарій демосценера. Розгорнуті цикли, самомодифікований код, стек як канал передачі даних та техніки, що дозволяють робити неможливе в межах бюджету.*
