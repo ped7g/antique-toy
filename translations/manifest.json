@@ -45,8 +45,8 @@
       "translation_sha256": "bf83e7ccd7f06b6b126a43c4afc45ba8543c9f90d80bcd7f73485bcff9df648d"
     },
     "chapters/ch12-music-sync": {
-      "source_sha256": "b633876a1b89bcefa87e021336e7bbf8d47e96c25a39a12d222127e116d8694b",
-      "translation_sha256": "2252ac48f0686c61b48b7bf15e0f9eeb65469c6d4550ac9ea858ba6e09116dae"
+      "source_sha256": "7241d2e5722c2d18b6f9d3fd38f977593de629571fa93687d9d736b3bc268ee3",
+      "translation_sha256": "b7a50dea8a42b43d9ce4f448e747e7a7f16fb26ef742f6719bf7ed0b11a0f9b7"
     },
     "chapters/ch13-sizecoding": {
       "source_sha256": "906529bf5547a7fbc549c1c531d83c1dd6156f81150c48eec3945129b6d7ba4e",
@@ -183,8 +183,8 @@
       "translation_sha256": "7feecf832fac7ee438b458089aaee44b027722e4e3cfcae0d5a05d2a41fb2045"
     },
     "chapters/ch12-music-sync": {
-      "source_sha256": "b633876a1b89bcefa87e021336e7bbf8d47e96c25a39a12d222127e116d8694b",
-      "translation_sha256": "73702d439196da08f5f06c95bbab0825f573093cfa0abf1151d4ae33b35a3d9e"
+      "source_sha256": "7241d2e5722c2d18b6f9d3fd38f977593de629571fa93687d9d736b3bc268ee3",
+      "translation_sha256": "fd86b3cb975e46361764c412812f9266cf07131fd5d7e1fa7c9c9ec64f60045a"
     },
     "chapters/ch13-sizecoding": {
       "source_sha256": "906529bf5547a7fbc549c1c531d83c1dd6156f81150c48eec3945129b6d7ba4e",
@@ -321,8 +321,8 @@
       "translation_sha256": "888a65c2f97486a1136ffd1cda344998791c5c5c50d462b111ccfb1d620d2c41"
     },
     "chapters/ch12-music-sync": {
-      "source_sha256": "b633876a1b89bcefa87e021336e7bbf8d47e96c25a39a12d222127e116d8694b",
-      "translation_sha256": "003601bf876d096f072d2d7f355df5ce17346751f6f0c2c350ec69dea5bcc464"
+      "source_sha256": "7241d2e5722c2d18b6f9d3fd38f977593de629571fa93687d9d736b3bc268ee3",
+      "translation_sha256": "97c5791785ba1aff70800390b538dfb5b98532131e8864776aee717bc4b32ed4"
     },
     "chapters/ch13-sizecoding": {
       "source_sha256": "906529bf5547a7fbc549c1c531d83c1dd6156f81150c48eec3945129b6d7ba4e",

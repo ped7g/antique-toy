@@ -182,7 +182,7 @@ for i, (row_data, row_colors) in enumerate(zip(data, colors)):
 
 # Title
 ax.text(total_w / 2, -0.3,
-        "n1k-o's demoplan for Unspoken (4D+TBK) — colour-coded sync map (Pattern 4, frames 1536–1614)",
+        "n1k-o's demoplan for Unspoken — colour-coded sync map (Pattern 4, frames 1536–1614)",
         ha='center', va='center', fontsize=10, fontweight='bold', style='italic')
 
 # Legend
