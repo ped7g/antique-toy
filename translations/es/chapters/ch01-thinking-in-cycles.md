@@ -31,7 +31,8 @@ Aquí tienes un puñado de instrucciones que usarás constantemente:
 
 Observa el rango. Un `LD A,B` de registro a registro cuesta 4 T-states -- el mínimo para cualquier instrucción. Una lectura de memoria `LD A,(HL)` cuesta 7, porque la CPU necesita ciclos de máquina adicionales para poner la dirección en el bus y esperar a que la RAM responda. `LDIR`, la instrucción de copia en bloque a la que todo programador de Spectrum recurre instintivamente, cuesta 21 T-states por cada byte que copia (excepto el último, que cuesta 16). Eso es más de cinco veces el coste de un NOP.
 
-![Costes en T-states de instrucciones Z80 comunes](illustrations/output/ch01_tstate_costs.png)
+<!-- figure: ch01_tstate_costs -->
+![T-state costs for common Z80 instructions](illustrations/output/ch01_tstate_costs.png)
 
 ¿Por qué importa esto? Porque cuando estás llenando una pantalla, o actualizando datos de sprites, o calculando el siguiente fotograma de un efecto de plasma, cada instrucción consume tu presupuesto. La diferencia entre una instrucción de 4 T-states y una de 7 T-states, multiplicada por diez mil iteraciones en un bucle interno, es la diferencia entre un efecto que funciona a 50 fotogramas por segundo y uno que no.
 
@@ -59,7 +60,8 @@ El número de T-states entre una interrupción y la siguiente -- el **presupuest
 
 Esos son T-states *totales* entre interrupciones. El presupuesto práctico es menor -- resta el coste del manejador de interrupciones (un reproductor de música PT3 típicamente consume 3.000--5.000 T-states por fotograma), la sobrecarga del HALT, y en máquinas que no son Pentagon, las penalizaciones por contención. En un Pentagon con un reproductor de música, espera aproximadamente 66.000--68.000 T-states para tu bucle principal. El Capítulo 15 tiene los mapas de tactos detallados.
 
-![Desglose del presupuesto de fotograma en diferentes modelos de ZX Spectrum](illustrations/output/ch01_frame_budget.png)
+<!-- figure: ch01_frame_budget -->
+![Frame budget breakdown across ZX Spectrum models](illustrations/output/ch01_frame_budget.png)
 
 Si tu bucle principal -- manejo de entrada, lógica del juego, actualización de sonido, renderizado de pantalla -- toma más T-states que un fotograma, pierdes fotogramas. Las cosas se ralentizan. El truco de la franja de borde que construiremos más adelante en este capítulo lo hará dolorosamente visible.
 
@@ -85,7 +87,7 @@ El Pentagon 128, el clon soviético del ZX Spectrum más popular, adoptó un enf
 
 Por esto el Pentagon tiene una duración de fotograma diferente -- 71.680 T-states, 320 líneas de escaneo. La temporización de la ULA es ligeramente diferente porque no hay necesidad de intercalar el acceso de CPU y ULA. Pero la recompensa es enorme: puedes contar ciclos con confianza absoluta. Cuando tu bucle interno dice que cuesta 36 T-states por iteración, cuesta 36 T-states por iteración, cada vez, en todas partes del fotograma.
 
-Esta temporización limpia es la razón por la que el Pentagon se convirtió en la plataforma estándar para la demoscene del ZX Spectrum, particularmente en la antigua Unión Soviética donde estos clones eran ubicuos. Cuando ves demos de grupos como X-Trade, 4D+TBK (Triebkraft) o Life on Mars, están dirigidas abrumadoramente a la temporización del Pentagon. Cuando Introspec escribió su legendario análisis técnico de Illusion por X-Trade, los conteos de ciclos que citó asumían Pentagon.
+This clean timing is why the Pentagon became the standard platform for the ZX Spectrum demoscene, particularly in the Former Soviet Union where these clones were ubiquitous. When you watch demos from groups like X-Trade, 4D+TBK (Triebkraft), or Life on Mars, they are overwhelmingly targeting Pentagon timing. When Introspec wrote his legendary technical teardown of Illusion by X-Trade, the cycle counts he quoted assumed Pentagon.
 
 Para aprender, el modelo Pentagon es ideal: puedes concentrarte en entender qué cuestan las instrucciones sin preocuparte por los efectos de contención. Todas las tablas de T-states en este libro asumen temporización Pentagon a menos que se indique lo contrario. Cuando necesitemos discutir las diferencias (y lo haremos, en el Capítulo 15), seremos explícitos.
 
@@ -101,7 +103,7 @@ Digamos que quieres llenar la pantalla completa con un color calculado cada foto
 
 Si tu bucle interno por byte de atributo se ve así:
 
-```z80
+```z80 id:ch01_thinking_in_budgets
     ld   a,c        ; 4T   column index
     add  a,b        ; 4T   add row index (diagonal pattern)
     add  a,d        ; 4T   add frame counter (animation)
@@ -147,7 +149,7 @@ Antes de escribir nuestro primer arnés de temporización, necesitas una cadena 
 
 Crea un directorio para tus experimentos del Capítulo 1. Un proyecto mínimo se ve así:
 
-```
+```text
 ch01/
   main.a80          -- your source file
   build.bat         -- (Windows) sjasmplus main.a80
@@ -211,7 +213,7 @@ La idea: cambia el color del borde a rojo inmediatamente antes del código que q
 
 Aquí está el arnés completo:
 
-```z80
+```z80 id:ch01_practical_the_timing_harness
     ORG $8000
 
 start:
@@ -247,13 +249,15 @@ start:
 
 Carga esto en tu emulador. Verás una franja roja a través del borde. La altura de esa franja es directamente proporcional al número de T-states que tu código de prueba consumió.
 
+![Timing harness output — red border stripes show T-states consumed by the code under test, black gaps show idle time](../../build/screenshots/ch01_timing_harness.png)
+
 ### Leyendo la Franja
 
 Cada línea de escaneo toma 224 T-states (en Pentagon). Así que si tu franja roja tiene N líneas de escaneo de alto, tu código tomó aproximadamente N x 224 T-states. El ejemplo anterior usa aproximadamente 7.419 T-states, que son aproximadamente 33 líneas de escaneo -- deberías ver una banda roja de aproximadamente un sexto del camino hacia abajo del borde.
 
 Ahora intenta reemplazar el bucle NOP con algo más pesado. Reemplaza los cuatro NOPs con:
 
-```z80
+```z80 id:ch01_reading_the_stripe
 .loop:
     ld   a,(hl)        ; 7T
     add  a,(hl)        ; 7T
@@ -271,7 +275,7 @@ Así es como los programadores de demos del Spectrum han perfilado sus efectos d
 
 Puedes usar diferentes colores para marcar diferentes fases de tu código:
 
-```z80
+```z80 id:ch01_variations
     ld   a, 2          ; red
     out  ($FE), a
     call render_sprites

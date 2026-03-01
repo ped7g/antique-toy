@@ -13,9 +13,9 @@ Este es el rompecabezas más famoso del Spectrum. El diseño de la memoria de pa
 
 La pantalla del Spectrum ocupa una región fija de memoria:
 
-```
-$4000 - $57FF    Datos de píxeles    6.144 bytes   (256 x 192 píxeles, 1 bit por píxel)
-$5800 - $5AFF    Atributos             768 bytes   (32 x 24 celdas de color)
+```text
+$4000 - $57FF    Pixel data      6,144 bytes   (256 x 192 pixels, 1 bit per pixel)
+$5800 - $5AFF    Attributes        768 bytes   (32 x 24 colour cells)
 ```
 
 El área de píxeles contiene el mapa de bits: 256 píxeles de ancho, empaquetados 8 por byte, dando 32 bytes por fila. Con 192 filas, eso son 32 x 192 = 6.144 bytes. Cada byte representa 8 píxeles horizontales, con el bit 7 como el píxel más a la izquierda y el bit 0 como el más a la derecha.
@@ -24,7 +24,8 @@ El área de atributos contiene la información de color: un byte por cada celda 
 
 En total: 6.144 + 768 = 6.912 bytes. Esa es la pantalla completa.
 
-![Diseño de memoria de pantalla del ZX Spectrum con tercios, celdas de caracteres y área de atributos](illustrations/output/ch02_screen_layout.png)
+<!-- figure: ch02_screen_layout -->
+![ZX Spectrum screen memory layout with thirds, character cells, and attribute area](illustrations/output/ch02_screen_layout.png)
 
 Los datos de píxeles y los datos de atributos sirven para propósitos diferentes pero están estrechamente acoplados. Cada byte de píxeles controla 8 puntos en pantalla; el byte de atributo para la celda 8x8 correspondiente controla en qué color aparecen esos puntos. Cambia el píxel y cambiarás la forma. Cambia el atributo y cambiarás el color. Pero solo puedes cambiar el color para un bloque entero de 8x8 -- no por píxel. Este es el "conflicto de atributos" que define el carácter visual del Spectrum, y volveremos a él en breve.
 
@@ -40,38 +41,38 @@ Eso no es lo que pasa.
 
 La pantalla se divide en tres **tercios**, cada uno de 64 filas de píxeles de alto. Dentro de cada tercio, las filas están entrelazadas por fila de celda de caracteres. Aquí es donde realmente viven las primeras 16 filas:
 
-```
-Fila  0:  $4000     Tercio 0, fila de car. 0, línea de escaneo 0
-Fila  1:  $4100     Tercio 0, fila de car. 0, línea de escaneo 1
-Fila  2:  $4200     Tercio 0, fila de car. 0, línea de escaneo 2
-Fila  3:  $4300     Tercio 0, fila de car. 0, línea de escaneo 3
-Fila  4:  $4400     Tercio 0, fila de car. 0, línea de escaneo 4
-Fila  5:  $4500     Tercio 0, fila de car. 0, línea de escaneo 5
-Fila  6:  $4600     Tercio 0, fila de car. 0, línea de escaneo 6
-Fila  7:  $4700     Tercio 0, fila de car. 0, línea de escaneo 7
-Fila  8:  $4020     Tercio 0, fila de car. 1, línea de escaneo 0
-Fila  9:  $4120     Tercio 0, fila de car. 1, línea de escaneo 1
-Fila 10:  $4220     Tercio 0, fila de car. 1, línea de escaneo 2
-Fila 11:  $4320     Tercio 0, fila de car. 1, línea de escaneo 3
-Fila 12:  $4420     Tercio 0, fila de car. 1, línea de escaneo 4
-Fila 13:  $4520     Tercio 0, fila de car. 1, línea de escaneo 5
-Fila 14:  $4620     Tercio 0, fila de car. 1, línea de escaneo 6
-Fila 15:  $4720     Tercio 0, fila de car. 1, línea de escaneo 7
+```text
+Row  0:  $4000     Third 0, char row 0, scan line 0
+Row  1:  $4100     Third 0, char row 0, scan line 1
+Row  2:  $4200     Third 0, char row 0, scan line 2
+Row  3:  $4300     Third 0, char row 0, scan line 3
+Row  4:  $4400     Third 0, char row 0, scan line 4
+Row  5:  $4500     Third 0, char row 0, scan line 5
+Row  6:  $4600     Third 0, char row 0, scan line 6
+Row  7:  $4700     Third 0, char row 0, scan line 7
+Row  8:  $4020     Third 0, char row 1, scan line 0
+Row  9:  $4120     Third 0, char row 1, scan line 1
+Row 10:  $4220     Third 0, char row 1, scan line 2
+Row 11:  $4320     Third 0, char row 1, scan line 3
+Row 12:  $4420     Third 0, char row 1, scan line 4
+Row 13:  $4520     Third 0, char row 1, scan line 5
+Row 14:  $4620     Third 0, char row 1, scan line 6
+Row 15:  $4720     Third 0, char row 1, scan line 7
 ```
 
 Observa el patrón. Las primeras 8 filas son las 8 líneas de escaneo de la fila de caracteres 0 -- pero están a 256 bytes de distancia, no a 32. Dentro de esas 8 filas, el byte alto de la dirección se incrementa en 1 cada vez: `$40`, `$41`, `$42`, ... `$47`. Luego la fila 8 salta a `$4020` -- vuelve a un byte alto de `$40`, pero con el byte bajo avanzado en 32.
 
 Aquí está el panorama completo para el tercio superior de la pantalla:
 
-```
-Fila car. 0:   líneas de escaneo en $4000, $4100, $4200, $4300, $4400, $4500, $4600, $4700
-Fila car. 1:   líneas de escaneo en $4020, $4120, $4220, $4320, $4420, $4520, $4620, $4720
-Fila car. 2:   líneas de escaneo en $4040, $4140, $4240, $4340, $4440, $4540, $4640, $4740
-Fila car. 3:   líneas de escaneo en $4060, $4160, $4260, $4360, $4460, $4560, $4660, $4760
-Fila car. 4:   líneas de escaneo en $4080, $4180, $4280, $4380, $4480, $4580, $4680, $4780
-Fila car. 5:   líneas de escaneo en $40A0, $41A0, $42A0, $43A0, $44A0, $45A0, $46A0, $47A0
-Fila car. 6:   líneas de escaneo en $40C0, $41C0, $42C0, $43C0, $44C0, $45C0, $46C0, $47C0
-Fila car. 7:   líneas de escaneo en $40E0, $41E0, $42E0, $43E0, $44E0, $45E0, $46E0, $47E0
+```text
+Char row 0:   scan lines at $4000, $4100, $4200, $4300, $4400, $4500, $4600, $4700
+Char row 1:   scan lines at $4020, $4120, $4220, $4320, $4420, $4520, $4620, $4720
+Char row 2:   scan lines at $4040, $4140, $4240, $4340, $4440, $4540, $4640, $4740
+Char row 3:   scan lines at $4060, $4160, $4260, $4360, $4460, $4560, $4660, $4760
+Char row 4:   scan lines at $4080, $4180, $4280, $4380, $4480, $4580, $4680, $4780
+Char row 5:   scan lines at $40A0, $41A0, $42A0, $43A0, $44A0, $45A0, $46A0, $47A0
+Char row 6:   scan lines at $40C0, $41C0, $42C0, $43C0, $44C0, $45C0, $46C0, $47C0
+Char row 7:   scan lines at $40E0, $41E0, $42E0, $43E0, $44E0, $45E0, $46E0, $47E0
 ```
 
 El tercio medio comienza en `$4800` y sigue el mismo patrón. El tercio inferior comienza en `$5000`.
@@ -90,11 +91,13 @@ El programador paga el precio.
 
 ## El Diseño de Bits: Decodificando (x, y) en una Dirección
 
+> **Fuentes:** Introspec "Eshchyo raz pro DOWN_HL" (Hype, 2020); Introspec "GO WEST Part 1" (Hype, 2015) para efectos de memoria contendida en direcciones de pantalla; Introspec "Making of Eager" (Hype, 2015) para diseño de efectos basados en atributos; la documentación de la ULA del Spectrum para la justificación del diseño de memoria; Art-top (comunicación personal, 2026) para el UP_HL optimizado y la conversión rápida de píxel a atributo.
+
 Para entender el entrelazado con precisión, observa cómo la coordenada Y se mapea en la dirección de pantalla de 16 bits. Considera un píxel en la columna `x` (0--255) y fila `y` (0--191). El byte que contiene ese píxel está en:
 
-```
-Byte alto:  0 1 0 T T S S S
-Byte bajo:  L L L C C C C C
+```text
+High byte:  0 1 0 T T S S S
+Low byte:   L L L C C C C C
 ```
 
 Donde:
@@ -107,17 +110,17 @@ Lo crucial: los bits de y no están en orden. Los bits 7-6 van a un lugar, los b
 
 Visualicemos esto con un ejemplo concreto. Píxel (80, 100):
 
-```
-x = 80:     byte de columna = 80 / 8 = 10      CCCCC = 01010
-y = 100:    binario = 01100100
-            TT  = 01       (tercio 1, el tercio medio)
-            LLL = 100      (fila de car. 4 dentro del tercio)
-            SSS = 100      (línea de escaneo 4 dentro de la celda)
+```text
+x = 80:     column byte = 80 / 8 = 10      CCCCC = 01010
+y = 100:    binary = 01100100
+            TT  = 01       (third 1, the middle third)
+            LLL = 100      (char row 4 within the third)
+            SSS = 100      (scan line 4 within the char cell)
 
-Byte alto:  0  1  0  0  1  1  0  0  = $4C
-Byte bajo:  1  0  0  0  1  0  1  0  = $8A
+High byte:  0  1  0  0  1  1  0  0  = $4C
+Low byte:   1  0  0  0  1  0  1  0  = $8A
 
-Dirección: $4C8A
+Address: $4C8A
 ```
 
 El bit dentro de ese byte se determina por los 3 bits bajos de x. El bit 7 es el píxel más a la izquierda, así que la posición del píxel (x AND 7) se mapea al bit 7 - (x AND 7).
@@ -126,7 +129,7 @@ El bit dentro de ese byte se determina por los 3 bits bajos de x. El bit 7 es el
 
 Convertir (x, y) a una dirección de pantalla es algo que necesitas hacer rápido y a menudo. Aquí tienes una rutina estándar:
 
-```z80
+```z80 id:ch02_the_address_calculation_in
 ; Input:  B = y (0-191), C = x (0-255)
 ; Output: HL = screen address, A = bit mask
 ;
@@ -163,6 +166,8 @@ pixel_addr:
 
 91 T-states no es barato. En un bucle interno apretado procesando miles de píxeles, no llamarías a esta rutina por cada píxel. En cambio, calculas la dirección de inicio una vez y luego navegas la pantalla usando manipulación rápida de punteros -- lo que nos lleva a la rutina más importante en la programación de gráficos del Spectrum.
 
+![Pixel plotting demo — individual pixels placed on screen using the address calculation routine](../../build/screenshots/ch02_pixel_demo.png)
+
 ---
 
 ## DOWN_HL: Mover una Fila de Píxeles Hacia Abajo
@@ -181,7 +186,7 @@ En el Spectrum, es un rompecabezas dentro del rompecabezas. Moverse una fila de 
 
 La rutina clásica maneja los tres casos:
 
-```z80
+```z80 id:ch02_downhl_moving_one_pixel_row
 ; DOWN_HL: move HL one pixel row down on the Spectrum screen
 ; Input:  HL = current screen address
 ; Output: HL = screen address one row below
@@ -190,14 +195,14 @@ down_hl:
     inc  h             ; 4T   try moving one scan line down
     ld   a, h          ; 4T
     and  7             ; 7T   did we cross a character boundary?
-    ret  nz            ; 11T  (5T if taken) no: done
+    ret  nz            ; 11/5T  no: done
 
     ; Crossed a character cell boundary.
     ; Reset scan line to 0, advance character row.
     ld   a, l          ; 4T
     add  a, 32         ; 7T   next character row (L += 32)
     ld   l, a          ; 4T
-    ret  c             ; 11T  (5T if taken) if carry, we crossed into next third
+    ret  c             ; 11/5T  if carry, we crossed into next third
 
     ; No carry from L, but we need to undo the H increment
     ; that moved us into the wrong third.
@@ -209,32 +214,32 @@ down_hl:
 
 Esta rutina toma diferentes cantidades de tiempo dependiendo del caso:
 
-| Caso | Frecuencia | T-states |
+| Case | Frequency | T-states |
 |------|-----------|----------|
-| Dentro de una celda de caracteres | 7 de cada 8 filas | 4 + 4 + 7 + 5 = **20** |
-| Límite de caracteres, mismo tercio | 6 de cada 64 filas | 4 + 4 + 7 + 11 + 4 + 7 + 4 + 11 + 4 + 7 + 4 + 10 = **77** |
-| Límite de tercio | 2 de cada 192 filas | 4 + 4 + 7 + 11 + 4 + 7 + 4 + 5 = **46** |
+| Within a character cell | 7 out of 8 rows | 4 + 4 + 7 + 11 = **26** |
+| Character boundary, same third | 7 out of 64 rows | 4 + 4 + 7 + 5 + 4 + 7 + 4 + 5 + 4 + 7 + 4 + 10 = **65** |
+| Third boundary | 2 out of 192 rows | 4 + 4 + 7 + 5 + 4 + 7 + 4 + 11 = **46** |
 
-El caso común -- permanecer dentro de una celda de caracteres -- es rápido: 20 T-states. Pero el caso infrecuente (cruzar un límite de fila de caracteres dentro del mismo tercio) es lento: 77 T-states. Promediado sobre las 192 filas, el coste resulta en aproximadamente **24,6 T-states por llamada**.
+The common case -- staying within a character cell -- is fast: 26 T-states (a conditional RET that fires costs 11T, not 5T). The uncommon case (crossing a character row boundary within the same third) is 65 T-states. Averaged over all 192 rows, the cost works out to about **30.5 T-states per call**.
 
-Ese promedio oculta un problema. Si estás iterando hacia abajo por toda la pantalla y llamando a DOWN_HL en cada fila, esas llamadas ocasionales de 77 T-states crean picos impredecibles en tu temporización por línea. Para un efecto de demo que necesita temporización consistente por línea de escaneo, este jitter es inaceptable.
+That average hides a problem. If you are iterating down the full screen and calling DOWN_HL on every row, those occasional 65-T-state calls spike your per-line timing unpredictably. For a demo effect that needs consistent timing per scanline, this jitter is unacceptable.
 
 ### La Optimización de Introspec
 
 En diciembre de 2020, Introspec (spke) publicó un análisis detallado en Hype titulado "Una vez más sobre DOWN_HL" (Eshchyo raz pro DOWN_HL). El artículo examinó el problema de iterar eficientemente hacia abajo por toda la pantalla -- no solo el coste de una llamada, sino el coste total de mover HL a través de las 192 filas.
 
-El enfoque ingenuo -- llamar a la rutina clásica DOWN_HL 191 veces -- cuesta **5.922 T-states** para un recorrido completo de la pantalla. El objetivo de Introspec era encontrar la forma más rápida de iterar a través de las 192 filas, visitando cada dirección de pantalla en orden de arriba a abajo.
+The naive approach -- calling the classic DOWN_HL routine 191 times -- costs **5,825 T-states** for a full screen traversal. Introspec's goal was to find the fastest way to iterate through all 192 rows, visiting every screen address in top-to-bottom order.
 
 Su perspicacia clave fue usar **contadores divididos**. En lugar de probar los bits de la dirección después de cada incremento para detectar cruces de límites, estructuró el bucle para que coincidiera directamente con la jerarquía de tres niveles de la pantalla:
 
-```
-Para cada tercio (3 iteraciones):
-    Para cada fila de caracteres dentro del tercio (8 iteraciones):
-        Para cada línea de escaneo dentro de la celda (8 iteraciones):
-            procesar esta fila
-            INC H                  ; siguiente línea de escaneo
-        deshacer 8 INC H's, ADD 32 a L   ; siguiente fila de caracteres
-    deshacer 8 ADD 32's, avanzar al siguiente tercio
+```text id:ch02_introspec_s_optimisation
+For each third (3 iterations):
+    For each character row within the third (8 iterations):
+        For each scan line within the character cell (8 iterations):
+            process this row
+            INC H                  ; next scan line
+        undo 8 INC H's, ADD 32 to L   ; next character row
+    undo 8 ADD 32's, advance to next third
 ```
 
 La operación más interna es solo `INC H` -- 4 T-states. Sin pruebas, sin ramificaciones. Las transiciones de fila de caracteres y de tercio ocurren en puntos fijos y predecibles del bucle, así que no hay lógica condicional en el bucle interno en absoluto.
@@ -247,7 +252,7 @@ La lección práctica: cuando necesites iterar a través de la pantalla del Spec
 
 Aquí tienes una versión simplificada del enfoque de contadores divididos:
 
-```z80
+```z80 id:ch02_introspec_s_optimisation_2
 ; Iterate all 192 screen rows using split counters
 ; HL = $4000 at entry (top-left of screen)
 ;
@@ -294,44 +299,43 @@ Debajo de los datos de píxeles, en `$5800`--`$5AFF`, se encuentra la memoria de
 
 Cada byte de atributo tiene este diseño:
 
-```
+```text
   Bit:   7     6     5  4  3     2  1  0
        +-----+-----+--------+--------+
        |  F  |  B  | PAPER  |  INK   |
        +-----+-----+--------+--------+
 
-  F       = Flash (0 = apagado, 1 = parpadeo a ~1,6 Hz)
-  B       = Bright (0 = normal, 1 = brillante)
-  PAPER   = Color de fondo (0-7)
-  INK     = Color de primer plano (0-7)
+  F       = Flash (0 = off, 1 = flashing at ~1.6 Hz)
+  B       = Bright (0 = normal, 1 = bright)
+  PAPER   = Background colour (0-7)
+  INK     = Foreground colour (0-7)
 ```
 
 Los códigos de color de 3 bits se mapean a:
 
-```
-  0 = Negro       4 = Verde
-  1 = Azul        5 = Cian
-  2 = Rojo        6 = Amarillo
-  3 = Magenta     7 = Blanco
+```text
+  0 = Black       4 = Green
+  1 = Blue        5 = Cyan
+  2 = Red         6 = Yellow
+  3 = Magenta     7 = White
 ```
 
 Con el bit BRIGHT, cada color tiene una variante normal y brillante. El negro permanece negro sea brillante o no, así que la paleta total es de 15 colores distintos:
 
+```text
+Normal:  Black  Blue  Red  Magenta  Green  Cyan  Yellow  White
+Bright:  Black  Blue  Red  Magenta  Green  Cyan  Yellow  White
+                (brighter versions of each)
 ```
-Normal:    Negro  Azul  Rojo  Magenta  Verde  Cian  Amarillo  Blanco
-Brillante: Negro  Azul  Rojo  Magenta  Verde  Cian  Amarillo  Blanco
-                  (versiones más brillantes de cada uno)
-```
 
-![Diseño de bits del byte de atributo mostrando campos de flash, bright, paper e ink](illustrations/output/ch02_attr_byte.png)
+<!-- figure: ch02_attr_byte -->
+![Attribute byte bit layout showing flash, bright, paper, and ink fields](illustrations/output/ch02_attr_byte.png)
 
-Un byte de atributo de `$47` significa: flash apagado, bright apagado, paper = 0 (negro), ink = 7 (blanco). Texto blanco sobre fondo negro -- el valor por defecto del Spectrum. La versión brillante sería `$C7`: `$47` OR `$40` establece el bit bright.
-
-Espera -- eso es incorrecto. Releamos el diseño de bits. El bit 6 es bright, así que blanco brillante sobre negro es `$47` con el bit 6 establecido: `$47 | $40 = $47`. No, `$47` ya es `01000111`. El bit 7 es flash, el bit 6 es bright. Entonces `$47` = flash apagado, bright **encendido**, paper 000, ink 111 = blanco brillante sobre negro. La versión no brillante sería `$07`.
+An attribute byte of `$47` = `01000111`: flash off (bit 7 = 0), bright **on** (bit 6 = 1), paper = 000 (black), ink = 111 (white). Bright white text on a black background. The non-bright version is `$07` = `00000111` -- the Spectrum's default after `BORDER 0: PAPER 0: INK 7`.
 
 Este tipo de detalle a nivel de bits importa cuando estás construyendo valores de atributos a velocidad. Un patrón común:
 
-```z80
+```z80 id:ch02_attribute_memory_768_bytes_4
 ; Build an attribute byte: bright white ink on blue paper
 ; Bright = 1, Paper = 001 (blue), Ink = 111 (white)
 ; = 01 001 111 = $4F
@@ -344,26 +348,26 @@ Aquí está la restricción que define al ZX Spectrum: dentro de cada celda de p
 
 Esto significa que si un sprite rojo se superpone con un fondo verde, la celda de 8x8 que contiene la superposición debe elegir: todos los píxeles activados en esta celda son o rojos o verdes. No puedes tener algunos píxeles activados rojos y algunos verdes en la misma celda. El resultado visual es un bloque discordante de color que "choca" con su entorno -- el infame conflicto de atributos.
 
-```
-Sin conflicto (hipotético color por píxel):
+```text
+Without clash (hypothetical per-pixel colour):
 
   +---------+---------+
-  |  Sprite | Rojo    |
-  |  rojo   | sobre   |
-  |  píxeles| fondo   |
-  |         | verde   |
+  |  Red    | Red on  |
+  |  sprite | green   |
+  |  pixels | back-   |
+  |         | ground  |
   +---------+---------+
 
-Con conflicto de atributos (realidad del Spectrum):
+With attribute clash (Spectrum reality):
 
   +---------+---------+
-  |  Sprite | TODO    |
-  |  rojo   | rojo    |
-  |  píxeles| o TODO  |
-  |         | verde   |
+  |  Red    | Either  |
+  |  sprite | ALL red |
+  |  pixels | or ALL  |
+  |         | green   |
   +---------+---------+
 
-  La celda superpuesta no puede tener ambos colores.
+  The overlapping cell cannot have both colours.
 ```
 
 Muchos juegos tempranos del Spectrum simplemente evitaron el problema: gráficos monocromáticos, o personajes cuidadosamente diseñados para alinearse con la cuadrícula de 8x8. Juegos como Knight Lore y Head Over Heels usaban un solo par ink/paper para toda el área de juego, eliminando el conflicto por completo a costa del color.
@@ -378,7 +382,7 @@ La demo Eager de Introspec (2015) construyó su lenguaje visual enteramente alre
 
 El área de pantalla de 256x192 píxeles se encuentra en el centro de la pantalla, rodeada por un borde ancho. El color del borde se establece escribiendo en el puerto `$FE`:
 
-```z80
+```z80 id:ch02_the_border_more_than
     ld   a, 1          ; 7T   blue = colour 1
     out  ($FE), a       ; 11T  set border colour
 ```
@@ -393,7 +397,7 @@ Debido a que los cambios de color del borde son visibles en la siguiente línea 
 
 El principio básico: la ULA dibuja una línea de escaneo cada 224 T-states (en Pentagon). Si ejecutas una instrucción `OUT ($FE), A` en el momento correcto, cambias el color del borde en una posición horizontal específica de la línea de escaneo actual. Ejecutando una secuencia rápida de instrucciones `OUT` con diferentes valores de color, puedes pintar franjas horizontales de color en el borde.
 
-```z80
+```z80 id:ch02_border_effects
 ; Simple border stripes
 ; Assumes we are synced to the start of a border scanline
 
@@ -419,7 +423,7 @@ Para nuestros propósitos, el papel más importante del borde es el del Capítul
 
 El ejemplo en `chapters/ch02-screen-as-puzzle/examples/fill_screen.a80` llena el área de píxeles con un patrón de tablero de ajedrez y los atributos con blanco brillante sobre azul. Recorrámoslo sección por sección.
 
-```z80
+```z80 id:ch02_practical_the_checkerboard
     ORG $8000
 
 SCREEN  EQU $4000       ; pixel area start
@@ -430,7 +434,7 @@ ATTLEN  EQU 768         ; attribute bytes (32*24)
 
 El código se coloca en `$8000` -- de forma segura en memoria no contendida en todos los modelos de Spectrum. Las constantes nombran las direcciones y tamaños clave.
 
-```z80
+```z80 id:ch02_practical_the_checkerboard_2
 start:
     ; --- Fill pixels with checkerboard pattern ---
     ld   hl, SCREEN
@@ -442,9 +446,9 @@ start:
 
 Esto usa el truco clásico de auto-copia LDIR. Escribe `$55` (binario `01010101`) en el primer byte en `$4000`, luego copia de cada byte al siguiente durante 6.143 bytes. El resultado: cada byte del área de píxeles es `$55`, lo que produce píxeles alternados activados/desactivados -- un tablero de ajedrez. Como el patrón es el mismo en cada byte, el orden entrelazado de las filas no importa -- cada fila obtiene el mismo patrón independientemente.
 
-Coste: `LDIR` a 21 T-states por byte x 6.143 + 16 para el último byte = 129.019 T-states. Casi dos fotogramas completos en un Pentagon. Esto está bien para una configuración única, pero nunca harías esto en un bucle de renderizado por fotograma.
+Cost: `LDIR` copies 6,143 bytes. The last iteration costs 16T, all others 21T: (6,143 - 1) x 21 + 16 = 128,998 T-states. Nearly two full frames on a Pentagon. This is fine for a one-time setup, but you would never do this in a per-frame rendering loop.
 
-```z80
+```z80 id:ch02_practical_the_checkerboard_3
     ; --- Fill attributes: white ink on blue paper ---
     ; Attribute byte: flash=0, bright=1, paper=001 (blue), ink=111 (white)
     ; = 01 001 111 = $4F
@@ -457,9 +461,9 @@ Coste: `LDIR` a 21 T-states por byte x 6.143 + 16 para el último byte = 129.019
 
 La misma técnica para los atributos. El valor `$4F` se decodifica como: flash apagado (0), bright encendido (1), paper azul (001), ink blanco (111). Cada celda de 8x8 obtiene ink blanco brillante sobre paper azul. Los píxeles del tablero de ajedrez están activados/desactivados, así que ves puntos alternados blancos y azules -- un patrón visual clásico del ZX Spectrum.
 
-Coste: 768 bytes x 21 + último byte a 16 = 16.143 T-states.
+Cost: `LDIR` copies 767 bytes -- (767 - 1) x 21 + 16 = 16,102 T-states.
 
-```z80
+```z80 id:ch02_practical_the_checkerboard_4
     ; --- Border: blue ---
     ld   a, 1
     out  ($FE), a
@@ -471,6 +475,8 @@ Coste: 768 bytes x 21 + último byte a 16 = 16.143 T-states.
 ```
 
 Establece el borde en azul (color 1) para que coincida con el color paper, creando un marco visualmente limpio. Luego entra en bucle infinito, deteniendo entre fotogramas. El `HALT` espera la siguiente interrupción enmascarable, que se dispara una vez por fotograma -- este es el latido inactivo de todo programa de Spectrum.
+
+![Screen fill with alternating bytes — checkerboard pattern in bright white on blue](../../build/screenshots/ch02_fill_screen.png)
 
 ### Qué probar
 
@@ -489,7 +495,7 @@ Aquí están las operaciones esenciales de punteros para la pantalla del Spectru
 
 ### Moverse a la derecha un byte (8 píxeles)
 
-```z80
+```z80 id:ch02_moving_right_one_byte_8
     inc  l             ; 4T
 ```
 
@@ -497,7 +503,7 @@ Esto funciona dentro de una fila de caracteres porque la columna está en los 5 
 
 ### Moverse una fila de píxeles hacia abajo
 
-```z80
+```z80 id:ch02_moving_down_one_pixel_row
     inc  h             ; 4T    (within a character cell)
 ```
 
@@ -505,7 +511,7 @@ Esto funciona para 7 de cada 8 filas. En la octava fila, necesitas la lógica co
 
 ### Moverse una fila de caracteres hacia abajo (8 píxeles)
 
-```z80
+```z80 id:ch02_moving_down_one_character_row
     ld   a, l          ; 4T
     add  a, 32         ; 7T
     ld   l, a          ; 4T    total: 15T (if no third crossing)
@@ -515,13 +521,13 @@ Esto avanza una fila de caracteres dentro de un tercio. Si L desborda (carry act
 
 ### Moverse una fila de píxeles hacia arriba
 
-```z80
+```z80 id:ch02_moving_up_one_pixel_row
     dec  h             ; 4T    (within a character cell)
 ```
 
 El inverso de `INC H`. Los mismos problemas de límites en los límites de celda de caracteres y de tercio. Aquí está la rutina completa UP_HL, el espejo de DOWN_HL:
 
-```z80
+```z80 id:ch02_moving_up_one_pixel_row_2
 ; UP_HL: move HL one pixel row up on the Spectrum screen
 ; Input:  HL = current screen address
 ; Output: HL = screen address one row above
@@ -532,13 +538,13 @@ up_hl:
     ld   a, h          ; 4T
     and  7             ; 7T   did we cross a character boundary?
     cp   7             ; 7T
-    ret  nz            ; 11T  (5T if taken) no: done
+    ret  nz            ; 11/5T  no: done
 
     ; Crossed a character cell boundary upward.
     ld   a, l          ; 4T
     sub  32            ; 7T   previous character row (L -= 32)
     ld   l, a          ; 4T
-    ret  c             ; 11T  (5T if taken) if carry, crossed into prev third
+    ret  c             ; 11/5T  if carry, crossed into prev third
 
     ld   a, h          ; 4T
     add  a, 8          ; 7T   compensate H
@@ -546,9 +552,9 @@ up_hl:
     ret                ; 10T
 ```
 
-Hay una optimización sutil aquí, contribuida por Art-top (Artem Topchiy): reemplazar `and 7 / cp 7` con `cpl / and 7`. Después de `DEC H`, si los 3 bits bajos de H pasaron de `000` a `111`, cruzamos un límite de caracteres. La prueba clásica verifica `AND 7` luego compara con 7. La versión optimizada complementa primero: si los bits son `111`, CPL los convierte en `000`, y `AND 7` da cero. Esto ahorra 1 byte y 3 T-states en la ruta de cruce de límites:
+There is a subtle optimisation here, contributed by Art-top (Artem Topchiy): replacing `and 7 / cp 7` with `cpl / and 7`. After `DEC H`, if the low 3 bits of H wrapped from `000` to `111`, we crossed a character boundary. The classic test checks `AND 7` then compares with 7. The optimised version complements first: if the bits are `111`, CPL makes them `000`, and `AND 7` gives zero. This saves 1 byte and 3 T-states in the boundary-crossing path:
 
-```z80
+```z80 id:ch02_moving_up_one_pixel_row_3
 ; UP_HL optimised (Art-top)
 ; Saves 1 byte, 3 T-states on boundary crossing
 ;
@@ -557,12 +563,12 @@ up_hl_opt:
     ld   a, h          ; 4T
     cpl                ; 4T   complement: 111 -> 000
     and  7             ; 7T   zero if we crossed boundary
-    ret  nz            ; 11T  (5T if taken)
+    ret  nz            ; 11/5T
 
     ld   a, l          ; 4T
     sub  32            ; 7T
     ld   l, a          ; 4T
-    ret  c             ; 11T  (5T if taken)
+    ret  c             ; 11/5T
 
     ld   a, h          ; 4T
     add  a, 8          ; 7T
@@ -574,102 +580,9 @@ El mismo truco `CPL / AND 7` funciona en DOWN_HL también, aunque la condición 
 
 ### Calcular la dirección de atributo desde una dirección de píxel
 
-Si HL apunta a un byte en el área de píxeles, la dirección de atributo correspondiente se puede calcular:
+If HL points to a byte in the pixel area, the corresponding attribute address can be calculated. Recall the pixel address structure: H = `010TTSSS`, L = `LLLCCCCC`. The attribute address for the same character cell is `$5800 + TT * 256 + LLL * 32 + CCCCC`. Since L already encodes `LLL * 32 + CCCCC` (which ranges 0--255), the attribute address is simply `($58 + TT) : L`. All we need to do is extract the two TT bits from H, combine them with `$58`, and leave L unchanged:
 
-```z80
-; Input:  HL = pixel address ($4000-$57FF)
-; Output: HL = attribute address ($5800-$5AFF)
-;
-pixel_to_attr:
-    ld   a, h          ; 4T
-    rrca               ; 4T   \
-    rrca               ; 4T    | shift bits 5-3 of H (TT, top LLL bit)
-    rrca               ; 4T   /  down to bits 2-0
-    and  3             ; 7T   keep only the third bits
-    or   $58           ; 7T   add attribute base
-    ld   h, a          ; 4T
-                       ; L is already correct (column + char row)
-    ; Total: ~34 T-states
-```
-
-Espera -- eso no es del todo correcto. La dirección de píxel tiene la estructura `010 TT SSS` en H y `LLL CCCCC` en L. La dirección de atributo necesita `01011 TT L` en H y `LL CCCCC` en L. En realidad, la dirección de atributo es simplemente `$5800 + (tercio * 256) + (fila_car * 32) + columna`. Permíteme rehacer esto correctamente.
-
-El atributo para la celda de caracteres en columna C, fila R (donde R = 0--23) está en `$5800 + R * 32 + C`. Dada una dirección de píxel en HL, necesitamos extraer la fila de caracteres (0--23) y la columna (0--31). La fila de caracteres es `tercio * 8 + fila_car_dentro_del_tercio`:
-
-```z80
-; Input:  HL = pixel address ($4000-$57FF)
-; Output: DE = attribute address ($5800-$5AFF)
-;         Preserves HL
-;
-pixel_to_attr:
-    ld   a, h          ; 4T   H = 010 TT SSS
-    and  $18           ; 7T   mask TT bits -> 000 TT 000
-    rrca               ; 4T   \
-    rrca               ; 4T    | shift to get 00000 TT 0
-    rrca               ; 4T   /
-    or   $58           ; 7T   add $58 -> 01011 TT 0  (almost)
-    ; Hmm, we also need LLL from L.
-```
-
-En la práctica, la formulación exacta depende de lo que necesites. El enfoque más simple usa el hecho de que el área de atributos es lineal:
-
-```z80
-; Pixel address HL -> attribute address HL
-; H = 010 TT SSS, L = LLL CCCCC
-;
-; Attribute H should be: 0101 1 TT L(bit 7)
-; Attribute L should be: LL CCCCC
-;
-; Discard SSS entirely (scan line is irrelevant for attributes).
-
-    ld   a, h          ; 4T
-    rra                ; 4T
-    rra                ; 4T
-    rra                ; 4T   A = scan(2:0) 010 TT => SSS 010 TT
-    and  $03           ; 7T   A = 000000 TT
-    or   $58           ; 7T   A = 01011 0 TT
-    ld   h, a          ; 4T
-
-    ld   a, l          ; 4T
-    rra                ; 4T
-    rra                ; 4T
-    rra                ; 4T   rotate LLL CCCCC => CCC CCLLL
-    ; That's not right either.
-```
-
-Permíteme dar la versión estándar bien conocida en lugar de derivarla incorrectamente:
-
-```z80
-; Convert pixel address in HL to attribute address in HL
-; Standard method
-;
-    ld   a, h          ; 4T   H = 010TTSSS
-    rrca               ; 4T   \
-    rrca               ; 4T    | rotate right 3 times
-    rrca               ; 4T   /  A = SSS010TT
-    and  $03           ; 7T   A = 000000TT
-    or   $58           ; 7T   A = 010110TT
-    ld   h, a          ; 4T   H now has the third
-
-    ; L = LLLCCCCC -- already contains char row (LLL) and column (CCCCC)
-    ; But we need to combine with TT from H.
-    ; Actually, the attribute address is $5800 + TT*$100 + L
-    ; Wait -- there are only 256 bytes per third in attributes,
-    ; and L already encodes LLL*32 + CCCCC, which ranges 0-255.
-    ; So the attribute address is simply ($58 + TT) : L.
-    ; But TT goes 0,1,2 and attributes go $5800, $5900, $5A00.
-    ; So H = $58 | TT is wrong -- it should be $58 + TT.
-    ; $58 + 0 = $58, $58 + 1 = $59, $58 + 2 = $5A. That works.
-    ; And OR with $58 when TT is in bits 0-1 gives:
-    ;   $58 | 0 = $58, $58 | 1 = $59, $58 | 2 = $5A. Correct!
-
-    ; L stays unchanged. Done.
-    ; Total: 34 T-states
-```
-
-Así que la versión final limpia es:
-
-```z80
+```z80 id:ch02_computing_the_attribute
 ; Convert pixel address in HL to attribute address in HL
 ; Input:  HL = pixel address ($4000-$57FF)
 ; Output: HL = corresponding attribute address ($5800-$5AFF)
@@ -686,9 +599,9 @@ Así que la versión final limpia es:
 
 Esto funciona porque L ya contiene `LLL CCCCC` -- la fila de caracteres dentro del tercio (0--7) combinada con la columna (0--31) -- y eso es exactamente el byte bajo de la dirección de atributo. El byte alto solo necesita el número de tercio sumado a `$58`. Elegante.
 
-**Caso especial: cuando H tiene bits de línea de escaneo = 111.** Si estás iterando a través de una celda de caracteres de arriba a abajo y acabas de procesar la última línea de escaneo (línea de escaneo 7), los 3 bits bajos de H son `111`. En este caso hay una conversión más rápida de 4 instrucciones, contribuida por Art-top:
+**Special case: when H has scanline bits = 111.** If you are iterating through a character cell top-to-bottom and have just processed the last scanline (scanline 7), the low 3 bits of H are `111`. In this case there is a faster 4-instruction conversion, contributed by Art-top:
 
-```z80
+```z80 id:ch02_computing_the_attribute_2
 ; Pixel-to-attribute when H low bits are %111
 ; (e.g., after processing the last scanline of a character cell)
 ; Input:  HL where H = 010TT111
@@ -705,20 +618,20 @@ Esto es 2 T-states más rápido que el método general y evita la secuencia `AND
 
 ---
 
-> **Recuadro Agon Light 2**
+> **Agon Light 2 Sidebar**
 >
-> La pantalla del Agon Light 2 es gestionada por un VDP (Video Display Processor) -- un microcontrolador ESP32 ejecutando la librería FabGL. La CPU eZ80 se comunica con el VDP a través de un enlace serial, enviando comandos para establecer modos gráficos, dibujar píxeles, definir sprites y gestionar paletas.
+> The Agon Light 2's display is managed by a VDP (Video Display Processor) -- an ESP32 microcontroller running the FabGL library. The eZ80 CPU communicates with the VDP over a serial link, sending commands to set graphics modes, draw pixels, define sprites, and manage palettes.
 >
-> No hay diseño de memoria entrelazado. No hay conflicto de atributos. El VDP soporta múltiples modos de mapa de bits a varias resoluciones (desde 640x480 hasta 320x240 y menores), con 64 colores o paletas RGBA completas dependiendo del modo. Los sprites por hardware (hasta 256) y mapas de tiles son soportados nativamente.
+> There is no interleaved memory layout. There is no attribute clash. The VDP supports multiple bitmap modes at various resolutions (from 640x480 down to 320x240 and below), with 64 colours or full RGBA palettes depending on the mode. Hardware sprites (up to 256) and tile maps are supported natively.
 >
-> Lo que cambia para el programador:
+> What changes for the programmer:
 >
-> - **Sin rompecabezas de direcciones.** Las coordenadas de píxeles se mapean linealmente a posiciones del búfer. No necesitas DOWN_HL ni recorrido de pantalla con contadores divididos.
-> - **Sin conflicto de atributos.** Cada píxel puede ser de cualquier color. La restricción de cuadrícula 8x8 no existe.
-> - **Sin acceso directo a memoria del framebuffer.** La CPU no puede escribir directamente a la memoria de vídeo como la CPU del Spectrum escribe en `$4000`. En cambio, envías comandos VDP a través del enlace serial. Dibujar un píxel significa enviar una secuencia de comandos, no almacenar un byte. Esto introduce latencia -- el enlace serial funciona a 1.152.000 baudios -- pero también significa que la CPU está libre durante el renderizado.
-> - **Sin trucos de borde a nivel de ciclo.** El VDP maneja la temporización de pantalla de forma independiente. No puedes crear efectos raster temporizando instrucciones `OUT`, porque el pipeline de pantalla está desacoplado del reloj de la CPU.
+> - **No address puzzle.** Pixel coordinates map linearly to buffer positions. You do not need DOWN_HL or split-counter screen traversal.
+> - **No attribute clash.** Each pixel can be any colour. The 8x8 grid constraint does not exist.
+> - **No direct memory access to the framebuffer.** The CPU cannot write directly to video memory the way a Spectrum CPU writes to `$4000`. Instead, you send VDP commands over the serial link. Drawing a pixel means sending a command sequence, not storing a byte. This introduces latency -- the serial link runs at 1,152,000 baud -- but it also means the CPU is free during rendering.
+> - **No cycle-level border tricks.** The VDP handles display timing independently. You cannot create raster effects by timing `OUT` instructions, because the display pipeline is decoupled from the CPU clock.
 >
-> Para un programador de Spectrum, el Agon se siente liberador y frustrante a partes iguales. Las restricciones que forzaron soluciones creativas en el Spectrum simplemente no existen -- pero tampoco los trucos directos de hardware que esas restricciones habilitaban. Cambias el rompecabezas por una API.
+> For a Spectrum programmer, the Agon feels freeing and frustrating in equal measure. The constraints that forced creative solutions on the Spectrum simply do not exist -- but neither do the direct-hardware tricks that those constraints enabled. You trade the puzzle for an API.
 
 ---
 
@@ -738,14 +651,14 @@ Cada técnica en el resto de este libro está moldeada por el diseño de pantall
 
 ## Resumen
 
-- La pantalla de 6.912 bytes del Spectrum consiste en **6.144 bytes de datos de píxeles** en `$4000`--`$57FF` y **768 bytes de atributos** en `$5800`--`$5AFF`.
-- Las filas de píxeles están **entrelazadas** por celda de caracteres: la dirección codifica y como `010 TT SSS` (byte alto) y `LLL CCCCC` (byte bajo), donde los bits de y se mezclan a través de la dirección.
-- Moverse **una fila de píxeles hacia abajo** dentro de una celda de caracteres es solo `INC H` (4 T-states). Cruzar límites de caracteres y de tercios requiere lógica adicional.
-- La rutina clásica **DOWN_HL** maneja todos los casos pero cuesta hasta 77 T-states en los límites. Para iteración de pantalla completa, los **bucles con contadores divididos** (enfoque de Introspec) reducen el coste total en un 60% y eliminan el jitter de temporización.
-- Cada byte de atributo codifica **Flash, Bright, Paper e Ink** en el formato `FBPPPIII`. Solo **dos colores por celda de 8x8** -- esto es el conflicto de atributos.
-- El conflicto de atributos no es solo una limitación sino una **restricción creativa** que definió la estética visual del Spectrum y llevó a efectos de demo eficientes basados solo en atributos.
-- El color del **borde** se establece con `OUT ($FE), A` (bits 0--2) y los cambios son visibles en la siguiente línea de escaneo, convirtiéndolo en una **herramienta de depuración de temporización** y un lienzo para efectos raster de la demoscene.
-- El **Agon Light 2** no tiene diseño entrelazado, ni conflicto de atributos, ni acceso directo al framebuffer -- reemplaza el rompecabezas con una API de comandos VDP.
+- The Spectrum's 6,912-byte display consists of **6,144 bytes of pixel data** at `$4000`--`$57FF` and **768 bytes of attributes** at `$5800`--`$5AFF`.
+- Pixel rows are **interleaved** by character cell: the address encodes y as `010 TT SSS` (high byte) and `LLL CCCCC` (low byte), where the bits of y are shuffled across the address.
+- Moving **one pixel row down** within a character cell is just `INC H` (4 T-states). Crossing character and third boundaries requires additional logic.
+- The classic **DOWN_HL** routine handles all cases but costs up to 65 T-states at boundaries. For full-screen iteration, **split-counter loops** (Introspec's approach) reduce total cost by 60% and eliminate timing jitter.
+- Each attribute byte encodes **Flash, Bright, Paper, and Ink** in the format `FBPPPIII`. Only **two colours per 8x8 cell** -- this is the attribute clash.
+- Attribute clash is not just a limitation but a **creative constraint** that defined the Spectrum's visual aesthetic and led to efficient attribute-only demo effects.
+- The **border** colour is set by `OUT ($FE), A` (bits 0--2) and changes are visible on the next scanline, making it a **timing debug tool** and a canvas for demoscene raster effects.
+- The **Agon Light 2** has no interleaved layout, no attribute clash, and no direct framebuffer access -- it replaces the puzzle with a VDP command API.
 
 ---
 
@@ -763,6 +676,6 @@ Cada técnica en el resto de este libro está moldeada por el diseño de pantall
 
 ---
 
-> **Fuentes:** Introspec "Eshchyo raz pro DOWN_HL" (Hype, 2020); Introspec "GO WEST Part 1" (Hype, 2015) para efectos de memoria contendida en direcciones de pantalla; Introspec "Making of Eager" (Hype, 2015) para diseño de efectos basados en atributos; la documentación de la ULA del Spectrum para la justificación del diseño de memoria; Art-top (Artem Topchiy) (comunicación personal, 2026) para el UP_HL optimizado y la conversión rápida de píxel a atributo.
+> **Sources:** Introspec "Eshchyo raz pro DOWN_HL" (Hype, 2020); Introspec "GO WEST Part 1" (Hype, 2015) for contended memory effects at screen addresses; Introspec "Making of Eager" (Hype, 2015) for attribute-based effect design; the Spectrum's ULA documentation for memory layout rationale; Art-top (personal communication, 2026) for the optimised UP_HL and fast pixel-to-attribute conversion.
 
 *Siguiente: Capítulo 3 -- La Caja de Herramientas del Demoscener. Bucles desenrollados, código auto-modificable, la pila como tubería de datos, y las técnicas que te permiten hacer lo imposible dentro del presupuesto.*

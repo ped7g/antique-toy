@@ -392,12 +392,14 @@ Saber qué instrucciones activan qué banderas te permite evitar instrucciones `
 ### Trucos prácticos
 
 **Comprobar A igual a cero sin CP 0:**
+
 ```z80
     or   a              ; 4T  sets Z if A=0, clears C
     and  a              ; 4T  same effect, but also sets H
 ```
 
 **Comprobar el acarreo después de INC/DEC de 16 bits:** No puedes. `INC rr`/`DEC rr` no activan banderas. Para comprobar si un registro de 16 bits llegó a cero:
+
 ```z80
     ld   a, b           ; 4T
     or   c              ; 4T  Z set if BC = 0
@@ -444,7 +446,7 @@ Saber qué instrucciones activan qué banderas te permite evitar instrucciones `
 
 `EXX` intercambia BC/DE/HL con BC'/DE'/HL' en **4T**. Esto te da seis registros extra de 8 bits (o tres pares extra de 16 bits) a un coste prácticamente nulo. Uso común: mantener punteros en el conjunto sombra e intercambiarlos según sea necesario.
 
-**Advertencia:** El manejador de interrupciones de la ROM del Spectrum (IM1) usa los registros sombra. Si las interrupciones están activadas, los datos de `EXX`/`EX AF,AF'` se corromperán en cada interrupción. Siempre usa `DI` antes de usar registros sombra, o cambia a IM2 con tu propio manejador.
+**Warning:** The Spectrum ROM interrupt handler (IM1) uses IY (it must point to the system variables at $5C3A or to safe memory). Shadow registers BC'/DE'/HL' and AF' are preserved by the ROM ISR and safe to use with interrupts enabled. If your code repurposes IY, disable interrupts first (`DI`) or switch to IM2 with your own handler.
 
 ### Emparejamiento de registros para instrucciones
 
@@ -468,26 +470,32 @@ Convierte coordenadas de pantalla a dirección de memoria de vídeo del ZX Spect
 ; pixel_addr: calculate screen address from coordinates
 ; Input:  B = Y (0-191), C = X (0-255)
 ; Output: HL = byte address, A = pixel bit position
-; Cost:   ~55 T-states
+; Cost:   ~107 T-states
 ;
 pixel_addr:
     ld   a, b           ; 4T   A = Y
-    and  $07             ; 7T   scanline within char cell (SSS)
+    and  $07             ; 7T   scanline within char cell (Y:2-0)
     or   $40             ; 7T   add screen base ($4000 high byte)
     ld   h, a           ; 4T   H = 010 00 SSS (partial)
     ld   a, b           ; 4T   A = Y again
     rra                 ; 4T   \
-    rra                 ; 4T    | shift character row (TTRR RRR)
-    rra                 ; 4T   /  to bits 4-3
-    and  $18             ; 7T   mask TT (third bits)
+    rra                 ; 4T    | shift right 3
+    rra                 ; 4T   /
+    and  $18             ; 7T   mask Y:4-3 (third bits)
     or   h              ; 4T   H = 010 TT SSS
     ld   h, a           ; 4T
+    ld   a, b           ; 4T   A = Y again
+    and  $38             ; 7T   mask Y:5-3 (character row within third)
+    rlca                ; 4T   \  rotate left 2 to get
+    rlca                ; 4T   /  Y:5-3 in bits 7-5
+    ld   l, a           ; 4T   L = RRR 00000 (partial)
     ld   a, c           ; 4T   A = X
     rra                 ; 4T   \
     rra                 ; 4T    | X / 8
     rra                 ; 4T   /
     and  $1F             ; 7T   mask to 5-bit column
-    ld   l, a           ; 4T   L = 000 CCCCC
+    or   l              ; 4T   combine row and column
+    ld   l, a           ; 4T   L = RRR CCCCC
 ```
 
 ### DOWN_HL: bajar una fila de píxeles
@@ -644,17 +652,17 @@ iterate_screen:
 
 Para decisiones de bucle interno, estas comparaciones son las más importantes:
 
-| Operación | Forma lenta | Forma rápida | Ahorro |
-|-----------|-------------|--------------|--------|
-| Poner A a cero | `LD A,0` (7T, 2B) | `XOR A` (4T, 1B) | 3T, 1B |
-| Comprobar A=0 | `CP 0` (7T, 2B) | `OR A` (4T, 1B) | 3T, 1B |
-| Copiar 1 byte a mem | `LD (HL),A`+`INC HL` (13T) | `LDI` (16T) | LDI es más lento pero auto-incrementa DE también |
-| Copiar N bytes | `LDIR` (21T/byte) | N x `LDI` (16T/byte) | 24% más rápido, cuesta 2N bytes de código |
-| Rellenar 2 bytes | `LD (HL),A`+`INC HL` x2 (26T) | `PUSH rr` (11T) | 58% más rápido, necesita secuestro de SP |
-| Bucle de 8 bits | `DEC B`+`JR NZ` (16T, 3B) | `DJNZ` (13T, 2B) | 3T, 1B por iteración |
-| Llamada indirecta | `CALL nn` (17T, 3B) | `RET` vía lista de renderizado (10T, 1B) | 7T, 2B por despacho |
-| Intercambio de registros | `LD A,H`+`LD H,D`+`LD D,A` (12T, 3B) | `EX DE,HL` (4T, 1B) | 8T, 2B |
-| Guardar 6 registros | 3 x `PUSH` (33T, 3B) | `EXX` (4T, 1B) | 29T, 2B |
+| Operation | Slow way | Fast way | Savings |
+|-----------|----------|----------|---------|
+| Zero A | `LD A,0` (7T, 2B) | `XOR A` (4T, 1B) | 3T, 1B |
+| Test A=0 | `CP 0` (7T, 2B) | `OR A` (4T, 1B) | 3T, 1B |
+| Copy 1 byte (HL)→(DE) | `LD A,(HL)`+`LD (DE),A`+`INC HL`+`INC DE` (26T, 4B) | `LDI` (16T, 2B) | 10T, 2B per byte |
+| Copy N bytes | `LDIR` (21T/byte) | N x `LDI` (16T/byte) | 24% faster, costs 2N bytes of code |
+| Fill 2 bytes | `LD (HL),A`+`INC HL` x2 (26T) | `PUSH rr` (11T) | 58% faster, needs SP hijack |
+| 8-bit loop | `DEC B`+`JR NZ` (16T, 3B) | `DJNZ` (13T, 2B) | 3T, 1B per iteration |
+| Indirect call | `CALL nn` (17T, 3B) | `RET` via render list (10T, 1B) | 7T, 2B per dispatch |
+| Register swap | `LD A,H`+`LD H,D`+`LD D,A` (12T, 3B) | `EX DE,HL` (4T, 1B) | 8T, 2B |
+| Save 6 registers | 3 x `PUSH` (33T, 3B) | `EXX` (4T, 1B) | 29T, 2B |
 
 ---
 

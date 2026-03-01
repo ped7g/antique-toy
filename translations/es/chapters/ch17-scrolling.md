@@ -22,10 +22,10 @@ Un desplazamiento de pantalla completa significa mover datos a través de los 6,
 
 Aquí está el coste bruto de simplemente *tocar* cada byte en el área de píxeles, usando diferentes métodos:
 
-| Método | Por byte | 6,144 bytes | % del fotograma |
+| Method | Per byte | 6,144 bytes | % of frame |
 |--------|----------|-------------|------------|
-| `ldir` | 21 T | 129,003 T | 180% |
-| cadena `ldi` | 16 T | 98,304 T | 137% |
+| `ldir` | 21 T | 129,019 T | 180% |
+| `ldi` chain | 16 T | 98,304 T | 137% |
 | `ld a,(hl)` + `ld (de),a` + `inc hl` + `inc de` | 24 T | 147,456 T | 206% |
 | `push` (2 bytes) | 5.5 T/byte | 33,792 T | 47% |
 
@@ -43,7 +43,7 @@ El desplazamiento vertical mueve el contenido de la pantalla hacia arriba o haci
 
 Recuerda la estructura de dirección de pantalla del Capítulo 2:
 
-```
+```text
 High byte:  0 1 0 T T S S S
 Low byte:   L L L C C C C C
 ```
@@ -118,7 +118,7 @@ Cuando desplazas la pantalla hacia la izquierda un píxel, cada byte en cada fil
 
 La instrucción `RL` (rotar a la izquierda a través del acarreo) del Z80 es la herramienta para esto. Para un desplazamiento hacia la izquierda, cada píxel se mueve una posición a la izquierda. El bit 7 es el píxel más a la izquierda en un byte, el bit 0 el más a la derecha. Desplazar a la izquierda significa que el bit 7 de cada byte sale y debe entrar en el bit 0 del byte a su izquierda. La bandera de acarreo conecta bytes adyacentes, así que procesamos la fila de **derecha a izquierda**:
 
-```z80
+```z80 id:ch17_why_horizontal_scrolling_is
 ; Scroll one pixel row left by 1 pixel
 ; HL points to byte 31 (rightmost) of the row
 ;
@@ -144,6 +144,8 @@ En realidad, el primer byte necesita `OR A` (4 T) para limpiar el acarreo. Así 
 Para 192 filas: 192 x 670 = **128,640 T-states**. Eso es el **179% de un fotograma**.
 
 Un desplazamiento horizontal de píxeles de pantalla completa de un píxel no cabe en un solo fotograma usando cadenas RL. Y esto es *solo la rotación* -- no hemos dibujado ningún contenido nuevo en el borde derecho.
+
+![Horizontal scrolling prototype — tiled play area with byte-level shift visualisation showing how RL chain propagates the carry bit across adjacent bytes](../../build/screenshots/proto_ch17_scrolling.png)
 
 ### El cálculo completo del presupuesto
 
@@ -183,7 +185,7 @@ El área de atributos es lineal: 32 bytes por fila, 24 filas, secuenciales de `$
 
 Para el área de atributos completa de 24 filas:
 
-```z80
+```z80 id:ch17_scrolling_attributes_with
 ; Scroll all attributes left by 1 character column
 ; New column data in a 24-byte table at new_col_data
 ;
@@ -279,7 +281,7 @@ Aquí está el desglose de coste por fotograma:
 
 La rutina interna clave rota 1 o 2 columnas de datos de píxeles 1 píxel. Para una ventana de 2 columnas (16 píxeles), cada fila tiene 2 bytes que rotar:
 
-```z80
+```z80 id:ch17_implementation_the_edge
 ; Shift 2 bytes left by 1 pixel with carry propagation
 ; HL points to the right byte of the pair
 ;
@@ -296,7 +298,7 @@ Para 160 filas (20 filas de caracteres x 8 líneas de escaneo): 160 x 40 = **6,4
 
 Aquí está la secuencia completa por fotograma para un scroller horizontal combinado:
 
-```z80
+```z80 id:ch17_the_rendering_pipeline
 frame_loop:
     halt                         ; wait for interrupt
 
@@ -351,7 +353,7 @@ El desplazamiento de píxeles a nivel de carácter (paso 2 en el pipeline anteri
 
 Para una sola fila, esto es un LDIR de 31 bytes:
 
-```z80
+```z80 id:ch17_scrolling_the_pixel_data_by
 ; Shift one pixel row left by 8 pixels (1 byte)
 ; HL = address of byte 1 (source), DE = address of byte 0 (dest)
 ; BC = 31
@@ -364,7 +366,7 @@ Para el área de juego completa (168 filas): 168 x 646 = 108,528 T-states + sobr
 
 Un mejor enfoque aprovecha el hecho de que dentro de cada línea de escaneo de una fila de caracteres, los bytes son contiguos. Para 20 columnas de caracteres, los datos de una línea de escaneo son 20 bytes contiguos. Desplazar esa línea de escaneo a la izquierda 1 byte significa un LDIR de 19 bytes:
 
-```z80
+```z80 id:ch17_scrolling_the_pixel_data_by_2
 ; Scroll one scan line of the play area left by 1 character column
 ; Play area is 20 columns wide (columns 2-21, for example)
 ; Source: column 3, Dest: column 2, count: 19
@@ -387,7 +389,7 @@ El ZX Spectrum 128K tiene una característica que transforma el problema del des
 
 El puerto `$7FFD` controla qué pantalla se muestra:
 
-```z80
+```z80 id:ch17_the_shadow_screen_trick
 ; Bit 3 of port $7FFD selects the display screen:
 ;   Bit 3 = 0: display page 5 (standard screen at $4000)
 ;   Bit 3 = 1: display page 7 (shadow screen at $C000)
@@ -405,7 +407,7 @@ El truco para el desplazamiento:
 
 Este enfoque de doble búfer elimina el tearing completamente y te da un fotograma completo (o más) para preparar cada fotograma desplazado. El coste es que necesitas mantener dos estados de pantalla completos, y cada "desplazamiento" es en realidad un redibujado completo del área de juego en el búfer trasero.
 
-```z80
+```z80 id:ch17_the_shadow_screen_trick_2
 ; Flip displayed screen and return back buffer address in HL
 ;
 ; screen_flag:  0 = showing page 5, drawing to page 7
@@ -413,7 +415,7 @@ Este enfoque de doble búfer elimina el tearing completamente y te da un fotogra
 ;
 flip_screens:
     ld   a, (screen_flag)
-    xor  1                   ; 4 T   toggle
+    xor  1                   ; 7 T   toggle (XOR with immediate)
     ld   (screen_flag), a
 
     ld   hl, $C000           ; assume drawing to page 7
@@ -469,6 +471,7 @@ Esto deja un 18% (~12,900 T-states) para sprites, lógica de juego y música. Aj
 | Pantalla sombra + redibujado de baldosas | ~59,000 | 82% | Suave, sin tearing | Requiere 128K |
 | Desplazamiento de carácter (saltos de 8px) | ~52,000--66,000 | 73--92% | Brusco | Para texto/estado con desplazamiento |
 
+<!-- figure: ch17_scroll_costs -->
 ![Scrolling technique cost comparison](illustrations/output/ch17_scroll_costs.png)
 
 ---
@@ -479,7 +482,7 @@ Todo lo anterior describe un desplazamiento hacia la izquierda (el jugador se mu
 
 Para el desplazamiento de atributos, invierte la dirección del LDIR. Copia los bytes 0--30 a las posiciones 1--31, de derecha a izquierda. LDIR copia hacia adelante (de direcciones bajas a altas), así que para un desplazamiento a la derecha necesitas LDDR (copiar hacia atrás):
 
-```z80
+```z80 id:ch17_scrolling_right_and_the
 ; Scroll attributes right by 1 character column
 ;
 scroll_attrs_right:
@@ -492,7 +495,7 @@ scroll_attrs_right:
 
 Para la rotación de bits de píxeles, un desplazamiento a la derecha usa `RR (HL)` en lugar de `RL (HL)`, procesando de izquierda a derecha:
 
-```z80
+```z80 id:ch17_scrolling_right_and_the_2
 ; Scroll one pixel row RIGHT by 1 pixel
 ; HL points to byte 0 (leftmost)
 ;
@@ -518,7 +521,7 @@ El VDP (Video Display Processor) del Agon Light 2 maneja el desplazamiento de un
 
 El VDP soporta un desplazamiento de viewport para los modos bitmap. Al establecer los registros de desplazamiento, mueves toda la imagen mostrada sin mover ningún dato de píxeles. El eZ80 envía un comando VDP a través del enlace serie:
 
-```z80
+```z80 id:ch17_hardware_scroll_offsets
 ; Agon: set horizontal scroll offset
 ; VDU 23, 0, &C3, x_low, x_high
 ;
@@ -540,7 +543,7 @@ El hardware aplica este desplazamiento al leer el framebuffer para la visualizac
 
 El modo tilemap del VDP proporciona renderizado de baldosas nativo. Defines un conjunto de baldosas (patrones de píxeles de 8x8 o 16x16), construyes un array de mapa que referencia índices de baldosas, y el hardware renderiza el mapa en tiempo de visualización. El desplazamiento se logra cambiando el desplazamiento del viewport del tilemap:
 
-```z80
+```z80 id:ch17_tilemap_scrolling
 ; Agon: set tilemap scroll offset
 ; VDU 23, 27, <tilemap_scroll_command>, offset_x, offset_y
 ;
@@ -563,7 +566,7 @@ Para un nivel con desplazamiento infinito, el tilemap actúa como un búfer circ
 2. Cuando una nueva columna de baldosas está a punto de entrar en la vista, el eZ80 escribe nuevos índices de baldosas en la columna que acaba de salir por el borde izquierdo.
 3. El tilemap se envuelve, y la columna recién escrita aparece a la derecha.
 
-```z80
+```z80 id:ch17_ring_buffer_column_loading
 ; Ring-buffer column loading (Agon, conceptual)
 ;
 ; tilemap is 40 columns wide, screen shows 32
@@ -603,7 +606,7 @@ El trabajo de CPU por fotograma es mínimo: escribir 20 índices de baldosas med
 | Límite de tamaño de mapa | Limitado por RAM, sin soporte de hardware | Tamaño de tilemap limitado por la memoria del VDP |
 | Color por baldosa | 2 colores por celda de 8x8 (atributo) | Color completo por píxel |
 
-El contraste es marcado. Lo que el programador de Spectrum gasta en la mayor parte de su presupuesto de fotograma -- mover datos de píxeles a través de un diseño de memoria revuelto -- el Agon lo maneja con una escritura de registro. Esto no es una crítica a ninguna de las dos plataformas. Es una demostración de cómo las decisiones de diseño de hardware se propagan a través de cada nivel del software. Las restricciones del Spectrum forzaron el desarrollo del método combinado de desplazamiento, los motores de baldosas y los trucos de la pantalla sombra. Las restricciones del Agon están en otra parte (latencia serie del VDP, sobrecarga de comandos para escenas complejas).
+The contrast is stark. What the Spectrum programmer spends most of their frame budget on -- moving pixel data across a scrambled memory layout -- the Agon handles with a register write. The hardware design choices propagate through every level of the software. The Spectrum's constraints forced the development of the combined scroll method, tile engines, and shadow-screen tricks. The Agon's constraints are elsewhere (serial VDP latency, command overhead for complex scenes).
 
 ---
 
@@ -615,7 +618,7 @@ Construye un juego de desplazamiento lateral horizontal con un área de juego de
 
 Aquí está la estructura completa:
 
-```z80
+```z80 id:ch17_spectrum_version_combined
 ; Side-scroller engine — ZX Spectrum 128K
 ; Uses combined character + pixel method with shadow screen.
 ;
@@ -706,6 +709,8 @@ shift_edge_columns:
     ; Total: 160 x 60 = 9,600 T
     ret
 ```
+
+![Horizontal pixel scroller showing smooth combined character-plus-pixel scrolling over a tiled play area](../../build/screenshots/ch17_hscroll.png)
 
 ### Versión Agon: desplazamiento de tilemap por hardware
 

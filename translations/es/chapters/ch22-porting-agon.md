@@ -49,6 +49,35 @@ Antes de entrar en el código, presentemos las dos máquinas lado a lado.
 
 La relación de presupuesto de fotograma es aproximadamente 5:1. Pero esto subestima la diferencia real, porque muchas operaciones que consumen T-states de CPU en el Spectrum --- renderizado de sprites, desplazamiento de pantalla, gestión del búfer de fotograma --- se descargan al VDP en el Agon. La CPU eZ80 dedica sus ciclos a la lógica del juego, no a mover píxeles.
 
+<!-- figure: ch22_spectrum_vs_agon_sprite -->
+
+```mermaid id:ch22_the_architecture_at_a_glance
+graph TD
+    subgraph ZX["ZX Spectrum: Draw Sprite (~1200T CPU)"]
+        direction TB
+        ZA["Calculate screen address<br>from (x, y) coordinates"] --> ZB["Select pre-shifted variant<br>(x mod 8 → shift table)"]
+        ZB --> ZC["For each pixel row:<br>AND mask with screen byte<br>OR sprite data<br>write back to framebuffer"]
+        ZC --> ZD["Advance to next screen row<br>(DOWN_HL: handle interleave)"]
+        ZD --> ZE{"16 rows<br>done?"}
+        ZE -- No --> ZC
+        ZE -- Yes --> ZF["Done — pixels in<br>video RAM at $4000"]
+    end
+
+    subgraph AGON["Agon Light 2: Draw Sprite (~50T CPU)"]
+        direction TB
+        AA["Send VDU 23,27,4,N<br>(select sprite N)"] --> AB["Send VDU 23,27,13,x,y<br>(set position)"]
+        AB --> AC["Send VDU 23,27,15<br>(update display)"]
+        AC --> AD["Done — VDP renders<br>sprite in hardware"]
+    end
+
+    style ZC fill:#fdd,stroke:#933
+    style AA fill:#dfd,stroke:#393
+    style AB fill:#dfd,stroke:#393
+    style AC fill:#dfd,stroke:#393
+```
+
+> **The architectural shift:** On the Spectrum, the CPU _is_ the rendering engine — every pixel is placed by Z80 instructions. On the Agon, the CPU is a _command sequencer_ — it tells the VDP what to draw, and the ESP32 coprocessor handles the actual rendering. The CPU cost drops from ~1,200T to ~50T per sprite, but you now manage an asynchronous command pipeline with serial latency.
+
 ---
 
 ## Modo ADL vs Modo Compatible con Z80
@@ -91,7 +120,7 @@ El sufijo `.IS` significa "Instruction Short" --- la instrucción de llamada en 
 
 Aquí está el patrón práctico para llamar a MOS desde código en modo Z80:
 
-```z80
+```z80 id:ch22_the_mode_switching_mechanism
 ; In Z80-compatible mode, calling a MOS API function
 ; We need to switch to ADL mode for the call
 
@@ -131,7 +160,7 @@ El sistema de entidades del Capítulo 18 --- los arrays de estructuras que conti
 
 Aquí está el bucle de actualización de entidades en el Spectrum:
 
-```z80
+```z80 id:ch22_game_logic_and_entity_system
 ; Spectrum: Update all entities
 ; IX points to entity array, B = entity count
 update_entities:
@@ -153,7 +182,7 @@ update_entities:
 
 Y en el Agon:
 
-```z80
+```z80 id:ch22_game_logic_and_entity_system_2
 ; Agon (ADL mode): Update all entities
 ; IX points to entity array, B = entity count
 update_entities:
@@ -179,7 +208,7 @@ La lógica es idéntica. Las instrucciones son idénticas. La diferencia es que 
 
 El código de colisiones del Capítulo 19 se transfiere directamente. Las comprobaciones AABB usan comparaciones de 8 bits o 16 bits --- las mismas instrucciones CP, SUB y salto condicional funcionan idénticamente en ambas máquinas.
 
-```z80
+```z80 id:ch22_aabb_collision_detection
 ; AABB collision check: identical on both platforms
 ; A = entity1.x, B = entity1.x + width
 ; C = entity2.x, D = entity2.x + width
@@ -197,7 +226,7 @@ check_overlap_x:
 
 Todos los cálculos de punto fijo 8.8 --- gravedad, velocidad, fricción, aceleración --- se portan sin cambios. Los patrones de desplazamiento y suma, las adiciones de 16 bits, la fricción por desplazamiento a la derecha:
 
-```z80
+```z80 id:ch22_fixed_point_arithmetic
 ; Apply gravity: velocity_y += gravity
 ; Works identically on both platforms
     ld   a,(ix+ENT_VY_LO)
@@ -214,7 +243,7 @@ La aritmética a nivel de byte no se preocupa de si los registros son nominalmen
 
 La máquina de estados del juego (título, menú, juego, pausa, game over) usa una tabla de saltos indexada por número de estado. En el Spectrum:
 
-```z80
+```z80 id:ch22_state_machine
 ; Spectrum: dispatch game state
     ld   a,(game_state)
     add  a,a               ; multiply by 2 (16-bit pointers)
@@ -238,12 +267,13 @@ state_table:
 
 En el Agon, la tabla de punteros almacena direcciones de 24 bits:
 
-```z80
+```z80 id:ch22_state_machine_2
 ; Agon (ADL mode): dispatch game state
     ld   a,(game_state)
-    ld   e,a
-    ld   d,0               ; DE = state index (24-bit, upper byte zero)
-    ld   hl,a              ; HL = state * 3
+    ld   l,a
+    ld   h,0               ; HL = state index
+    ld   e,l
+    ld   d,h               ; DE = copy of state index
     add  hl,hl             ; HL = state * 2
     add  hl,de             ; HL = state * 3 (24-bit pointers)
     ld   de,state_table
@@ -277,7 +307,7 @@ En el Spectrum (del Capítulo 16), dibujar un sprite enmascarado de 16x16 cuesta
 
 En el Agon, subes el bitmap del sprite *una vez*, y luego lo mueves enviando una actualización de posición:
 
-```z80
+```z80 id:ch22_rendering_from_framebuffer_to
 ; Agon: Create and position a hardware sprite
 ; Step 1: Upload sprite bitmap (done once at init)
 ;   VDU 23, 27, 4, spriteNum   ; select sprite
@@ -335,7 +365,7 @@ En el Spectrum, el desplazamiento horizontal significa desplazar cada byte de la
 
 En el Agon, el VDP soporta mapas de baldosas por hardware:
 
-```z80
+```z80 id:ch22_rendering_from_framebuffer_to_2
 ; Agon: Set up a tilemap (done once)
 ; VDU 23, 27, 20, tileWidth, tileHeight
 ; VDU 23, 27, 21, mapWidth.lo, mapWidth.hi, mapHeight.lo, mapHeight.hi
@@ -392,16 +422,16 @@ Cada conmutación de banco cuesta una escritura de puerto y limita qué código 
 
 En el Agon, todos los 512 KB son visibles simultáneamente. No hay conmutación de bancos. No hay truco de pantalla sombra (el VDP maneja el doble búfer internamente). Puedes tener tu juego entero --- los cinco niveles, todos los conjuntos de baldosas, todos los sprites, toda la música --- residente en memoria a la vez. Las transiciones de nivel no requieren carga desde cinta o disco; simplemente apuntas a una región diferente de RAM.
 
-Esto es liberador, pero también elimina una restricción que forzaba buena arquitectura. En el Spectrum, estabas obligado a pensar sobre localidad de datos, sobre qué necesitaba estar co-residente, sobre secuencias de carga. En el Agon, puedes ser descuidado. No seas descuidado. El Agon tiene 512 KB, no infinito. Un mapa de memoria bien organizado sigue siendo una virtud.
+This simplifies development, but it also removes a constraint that forced good architecture. On the Spectrum, you were forced to think about data locality, about what needed to be co-resident, about load sequences. On the Agon, you can be sloppy. Do not be sloppy. The Agon has 512 KB, not infinity. A well-organized memory map is still a virtue.
 
 Distribución de memoria típica del Agon para el juego portado:
 
-```
-$000000 - $00FFFF   MOS y sistema (reservado)
-$040000 - $04FFFF   Código del juego (~64 KB)
-$050000 - $06FFFF   Datos de nivel, los 5 niveles (~128 KB)
-$070000 - $07FFFF   Datos de música y SFX (~64 KB)
-$080000 - $0FFFFF   Libre / búfers de trabajo
+```text
+$000000 - $00FFFF   MOS and system (reserved)
+$040000 - $04FFFF   Game code (~64 KB)
+$050000 - $06FFFF   Level data, all 5 levels (~128 KB)
+$070000 - $07FFFF   Music and SFX data (~64 KB)
+$080000 - $0FFFFF   Free / working buffers
 ```
 
 Todo es direccionable con un solo `LD HL,$070000` --- sin conmutación de bancos, sin escrituras de puerto.
@@ -410,7 +440,7 @@ Todo es direccionable con un solo `LD HL,$070000` --- sin conmutación de bancos
 
 En el Spectrum, la carga desde cinta es un proceso de minutos con una firma de audio distintiva. Incluso con DivMMC y esxDOS, el acceso a archivos es una secuencia de llamadas RST $08:
 
-```z80
+```z80 id:ch22_loading
 ; Spectrum + esxDOS: load a file
     ld   a,'*'             ; current drive
     ld   ix,filename
@@ -431,7 +461,7 @@ En el Spectrum, la carga desde cinta es un proceso de minutos con una firma de a
 
 En el Agon, MOS proporciona una API de archivos que lee directamente desde la tarjeta SD:
 
-```z80
+```z80 id:ch22_loading_2
 ; Agon: load a file using MOS API
     ld   hl,filename       ; 24-bit pointer to filename string
     ld   de,buffer         ; 24-bit pointer to destination
@@ -456,7 +486,7 @@ El AY-3-8910 del Spectrum se programa escribiendo directamente en registros de h
 
 El audio del Agon es manejado por el VDP. Envías comandos de sonido a través del mismo enlace serial usado para gráficos:
 
-```z80
+```z80 id:ch22_sound
 ; Agon: play a note
 ; VDU 23, 0, 197, channel, volume, freq.lo, freq.hi, duration.lo, duration.hi
 
@@ -488,7 +518,7 @@ El sistema de sonido del Agon soporta múltiples formas de onda (seno, cuadrada,
 
 Un enfoque: escribir una capa de abstracción delgada que ambas plataformas compartan.
 
-```z80
+```z80 id:ch22_sound_2
 ; Abstract sound interface
 ; Spectrum implementation:
 sound_play_note:
@@ -511,7 +541,7 @@ El Spectrum lee el estado del teclado sondeando el puerto $FE con direcciones de
 
 El Agon lee el estado del teclado a través de MOS:
 
-```z80
+```z80 id:ch22_input
 ; Spectrum: read keyboard
     ld   a,$FD             ; half-row: Q W E R T
     in   a,($FE)
@@ -526,7 +556,7 @@ El Agon lee el estado del teclado a través de MOS:
 
 El Spectrum te da una máscara de bits de teclas presionadas simultáneamente, ideal para entrada de juego (puedes detectar múltiples teclas a la vez). La API de teclado de MOS del Agon está basada en eventos: te da la tecla más reciente presionada. Para entrada de juego con detección simultánea de teclas, típicamente usas el mapa de teclado de MOS --- una región de memoria actualizada por MOS que refleja el estado de todas las teclas:
 
-```z80
+```z80 id:ch22_input_2
 ; Agon: read simultaneous keys from keyboard map
     ld   a,(mos_keymap+KEY_LEFT)   ; 1 if left arrow held, 0 if not
     or   a
@@ -556,7 +586,7 @@ Incluso a 18 MHz con 368.000 T-states por fotograma, el bucle interno sigue impo
 
 Las técnicas de optimización básicas del Z80 --- mantener valores en registros en lugar de memoria, usar `INC L` en lugar de `INC HL` donde sea posible, evitar instrucciones indexadas IX/IY para caminos calientes (llevan una penalización de prefijo de 2 ciclos en eZ80, igual que llevan una penalización de 4 T-states en Z80) --- siguen produciendo mejoras medibles.
 
-```z80
+```z80 id:ch22_what_still_matters_inner_loop
 ; Tight entity scan: same optimization principles on both platforms
 ; Prefer: register-to-register ops, direct addressing, DJNZ
 ; Avoid: IX-indexed loads in hot inner loops when possible
@@ -587,7 +617,7 @@ Esto no significa que debas desperdiciar memoria. Pero significa que las decisio
 
 En el Spectrum, el código auto-modificable (SMC) es una técnica de optimización estándar. Escribes instrucciones que parchean sus propios operandos inmediatos para evitar búsquedas en memoria:
 
-```z80
+```z80 id:ch22_what_becomes_irrelevant_self
 ; Spectrum: self-modifying code for speed
     ld   a,0               ; operand patched at runtime
     ; ... (the $00 after LD A is overwritten with the real value)
@@ -642,7 +672,7 @@ Crea un nuevo proyecto con la cadena de herramientas del Agon. Necesitarás:
 
 Tu punto de entrada es diferente del Spectrum. En lugar de `ORG $8000` con un JP directo a tu dirección de inicio, el Agon carga ejecutables en $040000 y MOS pasa el control a esa dirección:
 
-```z80
+```z80 id:ch22_step_1_set_up_the_agon
 ; Agon: application entry point
     .ASSUME ADL=1          ; we are in ADL mode
     ORG  $040000
@@ -697,31 +727,7 @@ Ejecuta el juego. Verifica posiciones de sprites, cajas de colisión, velocidad 
 
 ## Lo Que Cada Plataforma Te Obliga a Hacer Mejor
 
-Esta es la verdadera lección del portado. Cada plataforma tiene restricciones que te empujan hacia mejor ingeniería, pero las restricciones son diferentes.
-
-### El Spectrum Te Obliga a Ser Eficiente
-
-Cuando tu presupuesto de fotograma es 71.680 T-states y solo tu motor de sprites consume 12.000 de ellos, aprendes a contar T-states. Aprendes a usar `INC L` en lugar de `INC HL`. Aprendes a desenrollar bucles. Aprendes a precalcular todo lo que puedas. Aprendes a pensar sobre la distribución de datos --- mantener datos relacionados en memoria contigua, alinear búfers a límites de página, organizar estructuras para que los campos más accedidos tengan los desplazamientos más pequeños.
-
-Esta disciplina se transfiere a cada plataforma en la que trabajes. El Spectrum te enseña lo que "eficiente" realmente significa a nivel de instrucción, y esa consciencia nunca te abandona. Incluso en el Agon, donde tienes T-states de sobra, escribir bucles internos ajustados es un hábito que vale la pena mantener.
-
-### El Spectrum Te Obliga a Ser Creativo
-
-Conflicto de atributos. Memoria de pantalla entrelazada. Un búfer de fotograma de 6.912 bytes que parece diseñado por un comité que nunca se reunió. Estas restricciones no existen en el Agon, y su ausencia elimina la presión creativa que produjo algunas de las técnicas visuales más distintivas del Spectrum.
-
-El truco multicolor, el truco de color de 4 fases, los efectos solo de atributos, el cambio de tercios de pantalla para doble búfer --- estas son soluciones a problemas que no existen en el Agon. No las inventarás si solo programas el Agon. Las restricciones del Spectrum son una escuela de resolución creativa de problemas.
-
-### El Agon Te Obliga a Pensar sobre Arquitectura
-
-Cuando la memoria ya no es escasa, cuando los T-states ya no son ajustados, los desafíos restantes son arquitectónicos. Como estructuras un bucle de juego que se comunica con un coprocesador asíncrono? Como temporizas tus comandos VDP para que los sprites se muevan suavemente? Como gestionas la cadena de datos que fluye de la CPU al VDP por serial?
-
-El Agon te enseña sobre diseño de sistemas: separación de responsabilidades, gestión de latencia, estructuración de protocolos de comando y construcción de capas de abstracción. Estas son habilidades de ingeniería de software que el Spectrum, con su ethos de "escribir directamente en el hardware", no enfatiza.
-
-### El Agon Te Obliga a Cuidar los Datos
-
-En el Spectrum, un sprite de 16x16 son 32 bytes de datos de píxel más 32 bytes de máscara. En el Agon, el mismo sprite en 8bpp RGBA son 1.024 bytes. Multiplica por 64 sprites a lo largo de 4 fotogramas de animación y tienes 256 KB solo de datos de sprites. Incluso con 512 KB, empiezas a pensar sobre cadenas de recursos: cómo convertir, optimizar y gestionar grandes volúmenes de datos gráficos.
-
-El Agon te hace un mejor *constructor de herramientas* --- escribiendo convertidores, optimizadores, scripts de cadena de recursos. El Spectrum te hace un mejor *optimizador* del código en sí. Ambas habilidades importan.
+The Spectrum teaches cycle-level efficiency and creative constraint-solving: you learn to count T-states, exploit memory layout, and invent techniques like multicolour and attribute-only effects that exist only because of the hardware's limitations. The Agon teaches system architecture: managing an asynchronous coprocessor, structuring command pipelines, and building asset conversion tools for larger data volumes. The Spectrum makes you a better optimiser; the Agon makes you a better system designer. Both skills transfer.
 
 ---
 
@@ -731,7 +737,7 @@ El eZ80 añade varias instrucciones que los programadores de Z80 apreciarán. La
 
 **LEA (Load Effective Address).** Calcula una dirección a partir de un registro base más un desplazamiento de 8 bits con signo, sin modificar el registro base:
 
-```z80
+```z80 id:ch22_a_note_on_ez80_instructions
 ; eZ80: LEA IX, IY + offset
 ; Compute IX = IY + displacement without changing IY
     LEA  IX,IY+ENT_SIZE    ; IX points to next entity
@@ -741,7 +747,7 @@ En el Z80, esto requiere `PUSH IY` / `POP IX` / `LD DE,ENT_SIZE` / `ADD IX,DE` -
 
 **TST (Test Immediate).** Hace AND del acumulador con un valor inmediato y establece las banderas, sin modificar A:
 
-```z80
+```z80 id:ch22_a_note_on_ez80_instructions_2
 ; eZ80: TST A, mask
 ; Test bits without destroying A
     TST  A,$80             ; test sign bit
@@ -752,7 +758,7 @@ En el Z80, necesitarías `BIT 7,A` (que no funciona con máscaras arbitrarias) o
 
 **MLT (Multiply).** Multiplicación sin signo de 8x8, resultado en un par de registros de 16 bits:
 
-```z80
+```z80 id:ch22_a_note_on_ez80_instructions_3
 ; eZ80: MLT BC
 ; B * C -> BC (16-bit result)
     ld   b,sprite_width

@@ -35,10 +35,35 @@ Así es como funciona realmente el desarrollo de Z80 asistido por IA en la prác
 
 ### El Bucle
 
-```
+```text
 prompt --> code --> assemble --> error? --> fix --> assemble --> run --> wrong? --> fix --> run --> correct
   ^                                                                                                |
   +------------------------------------------------------------------------------------------------+
+```
+
+<!-- figure: ch23_ai_feedback_loop -->
+
+```mermaid id:ch23_the_loop_2
+graph LR
+    A["Prompt<br>(describe what you want)"] --> B["Generate Code<br>(AI writes Z80 asm)"]
+    B --> C["Assemble<br>(sjasmplus / mza)"]
+    C --> D{"Errors?"}
+    D -- Yes --> E["Paste errors<br>back to AI"]
+    E --> B
+    D -- No --> F["Run in mzx<br>(--screenshot)"]
+    F --> G{"Output<br>correct?"}
+    G -- No --> H["Describe what's wrong<br>(or paste DeZog state)"]
+    H --> B
+    G -- Yes --> I{"Optimise?"}
+    I -- Yes --> J["Profile with DeZog<br>(measure T-states)"]
+    J --> A
+    I -- No --> K["Done!"]
+
+    style A fill:#ffd,stroke:#993
+    style B fill:#ddf,stroke:#339
+    style K fill:#dfd,stroke:#393
+    style D fill:#fee,stroke:#933
+    style G fill:#fee,stroke:#933
 ```
 
 Describes lo que quieres. La IA genera ensamblador Z80. Lo ensamblas. Falla -- sintaxis incorrecta, formato de etiqueta incorrecto, dialecto de ensamblador incorrecto. Pegas el error de vuelta. La IA lo corrige. Ensamblas de nuevo. Esta vez compila. Lo ejecutas en el emulador. La salida es incorrecta -- la pantalla se llena de basura, el borde es del color equivocado, no aparece nada en absoluto. Describes lo que ves. La IA ajusta. Ejecutas de nuevo.
@@ -49,7 +74,7 @@ Este bucle no es fundamentalmente diferente de cómo trabaja un programador huma
 
 Supón que le pides a Claude Code que escriba una rutina que llene el área de atributos del ZX Spectrum con un patrón de franjas diagonales. Aquí hay un primer intento plausible:
 
-```z80
+```z80 id:ch23_a_concrete_example
 ; Fill attributes with diagonal stripes
 ; Pattern: alternating INK colours along diagonals
     ORG $8000
@@ -84,7 +109,7 @@ Nada de esto es *incorrecto* en el sentido de que el código se cuelga. Es *inco
 
 Aquí está la versión a la que llegas después de dos iteraciones:
 
-```z80
+```z80 id:ch23_a_concrete_example_2
 fill_diagonal:
     ld   hl, $5800
     ld   d, 0               ; row index
@@ -111,6 +136,8 @@ fill_diagonal:
 ```
 
 Más limpio. Sin PUSH/POP. Las diagonales van en la dirección correcta. El bucle interno cuesta 4 + 4 + 7 + 4 + 7 + 7 + 6 + 4 + 13 = 56 T-states por byte -- no brillante, pero funcional para una rutina de llenado que se ejecuta una vez.
+
+El optimizador peephole de MinZ conoce 35+ patrones como "reemplazar `LD A,0` con `XOR A`." Pero ¿cómo *encuentras* tales patrones? ¿Y cómo sabes cuáles son realmente seguros?
 
 El punto no es que la IA escribió código malo. El punto es que el *bucle* -- prompt, generar, ensamblar, probar, corregir, probar de nuevo -- es el flujo de trabajo real. La asistencia de IA no elimina la necesidad de entender Z80. Desplaza el cuello de botella de escribir código a evaluar código.
 
@@ -209,7 +236,14 @@ MinZ es relevante para este capítulo por dos razones. Primero, es un caso de es
 
 ### Qué es MinZ
 
-MinZ proporciona variables tipadas (`u8`, `u16`, `i8`, `i16`, `bool`), funciones con múltiples retornos, flujo de control (`if/else`, `while`, `for i in 0..n`), structs, arrays, y una biblioteca estándar que cubre matemáticas, gráficos, entrada, sonido y operaciones de memoria. Compila a ensamblador Z80 a través de su propio ensamblador (`mza`), se ejecuta en su propio emulador (`mze`), y apunta a ZX Spectrum, CP/M y Agon Light 2.
+MinZ provides typed variables (`u8`, `u16`, `i8`, `i16`, `bool`), functions with multiple returns, control flow (`if/else`, `while`, `for i in 0..n`), structs, arrays, and a standard library covering maths, graphics, input, sound, and memory operations. It compiles to Z80 assembly via its own assembler (`mza`), runs on its own emulator (`mzx`), and targets ZX Spectrum, CP/M, MSX, and Agon Light 2.
+
+The toolchain includes four standalone tools:
+
+- **mza** — Z80 assembler with macros, multiple output formats (.sna, .tap, .com, .rom, .bin), and multi-platform targets
+- **mzx** — ZX Spectrum emulator with headless CLI mode, automated screenshots, keystroke injection, and frame-precise capture
+- **mzd** — Z80 disassembler with IDA-like recursive descent analysis, cross-references, T-state counting, and reassemblable output
+- **MinZ compiler** — compiles MinZ source to Z80 assembly via mza
 
 Un programa MinZ se ve así:
 
@@ -230,7 +264,7 @@ fun main() -> void {
 }
 ```
 
-Esto compila a ensamblador Z80, se ensambla a un binario, y se ejecuta en hardware real o emulado. La cadena de herramientas autocontenida -- compilador, ensamblador, emulador, REPL, ejecutor remoto -- significa cero dependencias externas.
+This compiles to Z80 assembly, assembles to a binary, and runs on real or emulated hardware. The self-contained toolchain -- compiler, assembler, emulator, disassembler -- means no external dependencies.
 
 ### Dónde la IA Ayudó a Construir MinZ
 
@@ -238,7 +272,36 @@ Esto compila a ensamblador Z80, se ensambla a un binario, y se ejecuta en hardwa
 
 **El ensamblador.** `mza`, el ensamblador Z80 de MinZ, fue construido con asistencia de IA. Soporta el conjunto completo de instrucciones Z80, macros, múltiples formatos de salida y ensamblaje de dos pasadas. La tabla de codificación de instrucciones -- que mapea mnemónicos a códigos de operación, manejando todos los patrones irregulares de bytes de prefijo del Z80 (CB, DD, ED, FD) -- fue generada por la IA y verificada contra la hoja de datos del Z80. Este es exactamente el tipo de código sistemático orientado a tablas que la IA maneja bien.
 
-**El emulador.** `mze` logra 100% de cobertura de instrucciones Z80. La IA generó la implementación inicial para cada instrucción desde el manual del Z80; el conjunto de pruebas (también generado por IA) capturó casos límite -- comportamiento de banderas en desbordamiento, la bandera de medio acarreo en DAA, temporización de interrupciones.
+**The emulator.** `mzx` achieves 100% Z80 instruction coverage, including all undocumented opcodes (ED prefix NOPs, DDCB/FDCB indexed bit operations). The AI generated the initial implementation for each instruction from the Z80 manual; the test suite (also AI-generated) caught edge cases -- flag behaviour on overflow, the half-carry flag on DAA, interrupt timing. But mzx's most useful feature -- built entirely through the AI feedback loop -- is its headless CLI mode:
+
+```text
+mzx --run program.bin@8000 --frames 100 --screenshot output.png
+mzx --load code.bin@8000,data.bin@C000 --set PC=8000,SP=FFFF,EI,IM=1
+mzx --model 128k --tap demo.tap --exec 'LOAD ""' --frames 500
+mzx --run effect.bin@8000 --frames DI:HALT --dump-keyframes ./frames/
+mzx --model pentagon --trd disk.trd --type "RUN\n" --screenshot grab.png
+```
+
+The `--run` flag loads a binary at a given address and starts execution -- no ROM, no BASIC, no loading screen. The `--frames DI:HALT` trigger captures the screenshot at the exact moment the code signals "frame complete" by disabling interrupts before a HALT. The `--dump-keyframes` flag saves only frames where the screen changed -- an automated visual regression test. The `--exec` and `--type` flags inject BASIC commands and keystrokes, allowing fully automated testing of programs that expect user interaction.
+
+This book's screenshot pipeline uses mzx directly. Every code example screenshot in these pages was generated by:
+
+```text
+sjasmplus --nologo --raw=build/example.bin example.a80
+mzx --run build/example.bin@8000 --frames 50 --screenshot build/ch09_plasma.png
+```
+
+Twenty-one examples, zero manual intervention, reproducible with `make screenshots`.
+
+**The disassembler.** `mzd` performs recursive descent analysis -- the same technique used by IDA Pro. Given a binary, it traces all execution paths from entry points, separates code from data, detects strings, generates cross-references, and auto-labels jump targets:
+
+```text
+mzd illusion.bin --org $6000 --analyze --target spectrum --cycles --labels
+```
+
+The `--cycles` flag adds T-state counts to every instruction -- automating the exact work that Introspec did by hand in his 2017 teardown of X-Trade's Illusion. The `--target spectrum` flag annotates system calls (RST $10 for character output, port $FE for border/keyboard). The `-R` flag produces reassemblable output, closing the disassemble-modify-reassemble loop.
+
+The AI built both `mzd`'s instruction decoder (systematic table-driven work) and its analysis engine (recursive descent, control flow graph construction). The platform-specific ABI knowledge (which ZX Spectrum ROM calls do what) was partly AI-generated, partly pulled from existing documentation.
 
 **La biblioteca estándar y el optimizador peephole.** Diez módulos stdlib (matemáticas, gráficos, entrada, sonido, etc.) y más de 35 patrones peephole ("reemplazar `LD A,0` con `XOR A`"). Ambos fueron generados por IA y refinados por humanos. La IA conoce el conjunto de instrucciones lo suficientemente bien como para sugerir simplificaciones válidas; el humano verifica la corrección semántica.
 
@@ -252,11 +315,40 @@ Esto compila a ensamblador Z80, se ensambla a un binario, y se ejecuta en hardwa
 
 ### El Veredicto de MinZ
 
-MinZ no podría existir sin asistencia de IA. El volumen puro de código sistemático -- el codificador de instrucciones, el emulador, la biblioteca estándar, los patrones peephole -- habría tardado años para un solo desarrollador escribirlo manualmente. Con asistencia de IA, MinZ pasó de concepto a v0.18.0 en aproximadamente 18 meses.
+MinZ could not exist without AI assistance. The sheer volume of systematic code -- the instruction encoder, the emulator, the disassembler's analysis engine, the standard library, the peephole patterns -- would have taken one developer years to write manually. With AI assistance, MinZ went from concept to a four-tool ecosystem in roughly 18 months.
 
-Pero las características *interesantes* de MinZ -- TSMC, la transformación lambda-a-función de costo cero, el despacho de métodos UFCS -- son invenciones humanas. La IA las implementó, pero no las concibió.
+But MinZ's *interesting* features -- TSMC, the zero-cost lambda-to-function transform, the UFCS method dispatch, mzx's `DI:HALT` trigger, mzd's platform-aware ABI annotations -- are human inventions. The AI implemented them, but did not conceive them.
 
 Esto se mapea precisamente al patrón HiSoft C. La herramienta acelera el trabajo rutinario enormemente. El trabajo creativo sigue siendo humano. El compromiso es real y vale la pena hacerlo.
+
+---
+
+## 23.5b Sidebar: The Other AI — Brute-Force Superoptimisation
+
+MinZ's peephole optimiser knows 35+ patterns like "replace `LD A,0` with `XOR A`." But how do you *find* such patterns? And how do you know which ones are actually safe?
+
+Consider `LD A, 0` → `XOR A`. Both set A to zero. Both take fewer bytes in the XOR form (1 byte vs 2). But `XOR A` clears the carry flag and sets the zero flag; `LD A, 0` preserves all flags. If the code after this instruction tests carry, the "optimisation" is a bug. A human expert knows this. A neural-network-based AI *usually* knows this but sometimes forgets. A brute-force superoptimiser *proves* it by testing every possible input state.
+
+**z80-optimizer** (by oisee, 2025) takes the brute-force approach to its logical conclusion. It enumerates every pair of Z80 instructions — all 406 opcodes × 406 opcodes = 164,836 pairs — and for each pair, tests whether a shorter replacement produces identical output across all possible register and flag states. No heuristics. No training data. No neural networks. Just exhaustive enumeration with full state equivalence verification.
+
+The results: **602,008 provably correct optimisation rules** from a single run on an Apple M2 (34.7 billion comparisons in 3 hours 16 minutes). Some highlights:
+
+| Original sequence | Replacement | Savings |
+|---|---|---|
+| `SLA A : RR A` | `OR A` | 3 bytes, 12T |
+| `LD A, 0 : NEG` | `SUB A` | 2 bytes |
+| `LD A, B : ADD A, 0` | `LD A, B : OR A` | 0 bytes, 4T |
+| `SCF : RR A` | `SCF : RRA` | 1 byte, 4T |
+
+The rules cluster into **83 unique transformation patterns** — families of replacements that share the same structural logic. For instance, the "load-then-test" family: `LD A, r : ADD A, 0` → `LD A, r : OR A` applies to all register sources because the optimisation exploits flag behaviour, not register identity.
+
+What makes z80-optimizer interesting for this chapter is not the specific rules — any experienced Z80 coder knows most of the common ones. It is the *methodology*. This is AI in the original sense: a machine that finds knowledge through search, not through learned patterns. The 602,008 rules include thousands that no human has catalogued, because they involve obscure opcode pairs that nobody writes deliberately but that compilers and code generators *do* produce.
+
+The obvious next step — length-3 sequences — requires GPU brute force (406³ = 67 million triples × all input states). Beyond that, stochastic search (STOKE-style) can explore the space of longer replacements without exhaustive enumeration.
+
+For practical Z80 development, z80-optimizer complements the AI feedback loop from this chapter: Claude Code generates correct-but-unoptimised code, then z80-optimizer can mechanically verify whether any instruction pairs have shorter equivalents. One AI writes the code; the other AI proves how to shrink it.
+
+**Source:** `github.com/oisee/z80-optimizer` (MIT license)
 
 ---
 
@@ -266,13 +358,13 @@ El escepticismo de Introspec sobre las capacidades de la IA con Z80 no es tecnof
 
 Considera el bucle interno del rotozoomer de su análisis de Illusion. El efecto recorre una textura en ángulo, produciendo píxeles chunky 2x2 rotados y escalados. El bucle interno es:
 
-```z80
+```z80 id:ch23_honest_take_z80_they_still
     ld   a, (hl)    ; 7T   read texture byte
     inc  l          ; 4T   next column (no carry needed: 256-aligned!)
     dec  h          ; 4T   previous row
-    add  a          ; 4T   double (same as SLA A but 4T not 8T)
-    add  a          ; 4T   quadruple
-    add  (hl)       ; 7T   combine with second texture sample
+    add  a,a        ; 4T   double (same as SLA A but 4T not 8T)
+    add  a,a        ; 4T   quadruple
+    add  a,(hl)     ; 7T   combine with second texture sample
                     ; --- 30T per pixel pair
 ```
 
@@ -288,7 +380,7 @@ Probamos Claude Code en varias tareas Z80 del dominio de la demoscene. Aquí hay
 
 El primer intento de la IA:
 
-```z80
+```z80 id:ch23_what_the_ai_gets_wrong
 down_hl:
     inc  h              ; 4T   move down one pixel row
     ld   a, h           ; 4T
@@ -304,9 +396,9 @@ down_hl:
     ret                 ; 10T
 ```
 
-Esto es correcto para los dos primeros tercios de la pantalla pero falla en el límite del tercer tercio. La memoria de pantalla está dividida en tres tercios de 2.048 bytes, y la transición del segundo al tercer tercio requiere sumar $08 a H, no restar. La IA generó código que maneja el caso común correctamente pero se equivoca en el caso límite.
+This is actually correct -- it handles all three screen thirds properly, including the boundary transitions. The AI can get standard routines like DOWN_HL right because the pattern is well-documented and appears in many Z80 references. The routine works: `inc h` advances the pixel row, `add a, 32` advances the character row when needed, the carry from the L addition correctly detects third boundaries, and `sub 8` undoes the spurious TT increment for the common case.
 
-El artículo de Introspec presenta una versión de RST7 usando un enfoque de doble contador que maneja todos los límites correctamente en 2.343 T-states para un recorrido de pantalla completa. La versión ingenua -- la que la mayoría de los humanos escriben en su primer intento, y la que la IA aproxima -- cuesta 5.922 T-states. La brecha entre "funciona" y "funciona bien" es un factor de 2,5x.
+But "correct" is not the same as "good." Introspec's article presents a version by RST7 using a dual-counter approach that handles all boundaries in 2,343 T-states for a full-screen traverse. The naive approach above -- the standard textbook version -- costs 5,922 T-states. The gap between "works" and "works well" is a factor of 2.5x, and the AI does not bridge that gap. It produces the first version any competent programmer would write, not the version an expert would optimise toward.
 
 **Tarea: Generar un llenado de pantalla desenrollado.** Cuando se le pidió generar un llenado de pantalla basado en PUSH desenrollado (la técnica del Capítulo 3), la IA produjo código correcto -- pares PUSH escribiendo dos bytes a la vez, DI/EI para proteger la manipulación del puntero de pila. Pero no pensó en organizar los datos en orden inverso (PUSH escribe primero el byte alto, en direcciones más bajas), lo que significa que el patrón de llenado estaba al revés. Un humano que ha escrito llenados PUSH antes tiene esto en cuenta automáticamente.
 
@@ -374,17 +466,7 @@ Para prompts de optimización, da un objetivo concreto: "Esta rutina toma ~3.200
 
 ## 23.10 El Panorama General
 
-Cada herramienta que eleva el nivel de abstracción en hardware con restricciones sigue la misma trayectoria. BASIC: accesible, lento, consumidor de memoria. HiSoft C: más rápido, más estructurado, pero limitado. Macro ensambladores y desarrollo cruzado: mismo nivel de abstracción, menos fricción.
-
-El desarrollo asistido por IA es el último paso. No cambia el nivel de abstracción de la salida -- sigues escribiendo ensamblador Z80, y el Z80 sigue ejecutando las mismas instrucciones a las mismas velocidades. Lo que cambia es la velocidad de la entrada -- lo rápido que vas de la idea al código funcional (si no optimizado).
-
-La demoscene del ZX Spectrum ha estado limitada no solo por el hardware de la máquina sino por el *costo humano* de programarla. Escribir ensamblador Z80 es lento. Depurarlo es más lento. Aprender los trucos lleva años. La asistencia de IA baja la barrera de entrada sin bajar el techo. Los expertos seguirán escribiendo mejores bucles internos que cualquier IA. Pero más personas llegarán al punto donde pueden apreciar *por qué* esos bucles internos son mejores.
-
-Eso es bueno para la escena. La demoscene prospera con la participación. Si la combinación de técnicas documentadas y herramientas asistidas por IA trae nuevos creadores a la escena del ZX Spectrum, el compromiso vale la pena hacerlo.
-
-Introspec tiene razón en que la IA no conoce el Z80 -- no como él lo conoce. Pero la IA no necesita conocer el Z80 como Introspec. Necesita conocerlo lo suficientemente bien como para ayudar a un principiante a empezar, cometer menos errores, y llegar al punto donde pueda aprender los trucos profundos de los artículos de Introspec por sí mismo.
-
-Ni magia ni inútil. Una herramienta. Como HiSoft C, pero diferente.
+AI assistance does not change the abstraction level of the output -- the Z80 still executes the same instructions at the same speeds. What it changes is the speed of the input: how fast you go from idea to working (if unoptimised) code. The demoscene's experts will still write better inner loops than any AI, but AI-assisted tooling lowers the entry barrier enough that more people can start making demos and learn the deep tricks for themselves.
 
 ---
 
@@ -416,12 +498,14 @@ Ni magia ni inútil. Una herramienta. Como HiSoft C, pero diferente.
 
 3. **El desafío DOWN_HL.** Pide a la IA que escriba una rutina DOWN_HL. Pruébala en las 192 filas de píxeles. Maneja correctamente las transiciones de límite de tercio? Compara con el análisis de Introspec (Hype, 2020). Esta es una prueba de fuego para la competencia de IA con Z80.
 
-4. **El experimento MinZ.** Instala la cadena de herramientas MinZ (`mza`, `mze`). Escribe un programa simple en MinZ -- un llenado de pantalla, un lector de teclado, un píxel rebotante. Compara el ensamblador generado con lo que escribirías a mano. Dónde es buena la salida de MinZ? Dónde es derrochadora?
+4. **The MinZ experiment.** Install the MinZ toolchain (`mza`, `mzx`, `mzd`). Assemble a screen fill with `mza`, run it headless with `mzx --run fill.bin@8000 --frames 5 --screenshot fill.png`, then disassemble a demo binary with `mzd demo.bin --analyze --cycles --target spectrum`. Compare the AI-built disassembler's T-state counts to your own hand-counted totals from Chapter 1.
 
-5. **Construye algo.** Elige un efecto de un capítulo anterior. Usa asistencia de IA para escribir el primer borrador. Itera hasta que funcione. Perfílalo. Optimiza el bucle interno a mano. Documenta cada paso. Acabas de experimentar el flujo de trabajo que todo este capítulo describe.
+5. **The automated pipeline.** Write an effect, assemble it, and add it to a `Makefile` that runs `mzx --screenshot` for every binary. Run `mzx --dump-keyframes` to see exactly which frames produce visible changes. This is the same pipeline that generated every screenshot in this book.
+
+6. **Build something.** Pick an effect from an earlier chapter. Use AI assistance to write the first draft. Iterate until it works. Profile it. Optimise the inner loop by hand. Document each step. You have just experienced the workflow this entire chapter describes.
 
 ---
 
 *Este es el último capítulo técnico. Lo que sigue son los apéndices -- tablas de referencia, guías de configuración, y la referencia de instrucciones a la que recurrirás cada vez que escribas ensamblador Z80.*
 
-> **Fuentes:** Reseña de HiSoft C (Spectrum Expert #02, 1998); Introspec "Technical Analysis of Illusion" (Hype, 2017); Introspec "DOWN_HL" (Hype, 2020); Introspec "GO WEST Parts 1-2" (Hype, 2015)
+> **Sources:** HiSoft C review (Spectrum Expert #02, 1998); Introspec "Technical Analysis of Illusion" (Hype, 2017); Introspec "DOWN_HL" (Hype, 2020); Introspec "GO WEST Parts 1-2" (Hype, 2015); z80-optimizer (oisee, 2025, `github.com/oisee/z80-optimizer`)

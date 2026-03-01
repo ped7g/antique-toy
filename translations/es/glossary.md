@@ -112,23 +112,23 @@ Vocabulario técnico utilizado a lo largo de *Coding the Impossible*. Los térmi
 
 ### Personas clave
 
-| Nombre | Rol | Capítulos |
-|--------|-----|-----------|
-| Dark | Programador, X-Trade. Autor de artículos de programación en Spectrum Expert. Programador de Illusion. | Ch01, Ch04, Ch05, Ch06, Ch07, Ch10 |
-| Introspec (spke) | Programador, Life on Mars. Hizo ingeniería inversa de Illusion. Autor de artículos en Hype (análisis técnicos, serie GO WEST, DOWN_HL). Programó la demo Eager. | Ch01--Ch12, Ch15, Ch23 |
-| n1k-o | Músico, Skrju. Compuso la banda sonora de Eager. Desarrolló la técnica de tambores digitales híbridos con Introspec. | Ch09, Ch12 |
-| diver4d | Programador, 4D+TBK (Triebkraft). Demo GABBA (CAFe 2019). Pionero del flujo de trabajo de sincronización con editor de vídeo (Luma Fusion). | Ch09, Ch12 |
-| DenisGrachev | Programador. Old Tower, motor GLUF, motor Ringo, Dice Legends. Técnica de encadenamiento RET. | Ch03, Ch08 |
-| Robus | Programador. Sistema de threading Z80, demo WAYHACK. | Ch12 |
-| psndcj (cyberjack) | Programador, 4D+TBK (Triebkraft). Experiencia en AY/TurboSound. Demo Break Space (efecto Magen Fractal). | Ch01, Ch07, Ch14 |
-| Screamer (sq) | Programador, Skrju. Investigación de optimización de píxeles gruesos (Born Dead #05, Hype). Guía de entorno de desarrollo. | Ch01, Ch07 |
-| Ped7g | Peter Helcmanovsky. Mantenedor de sjasmplus, colaborador del ZX Spectrum Next. Retroalimentación sobre aritmética con signo y RLE. | Ch04, Ch14, Ap. F |
-| RST7 | Programador. Optimización de DOWN_HL con doble contador. | Ch02 |
+| Name | Role | Chapters |
+|------|------|----------|
+| Dark | Coder, X-Trade. Author of Spectrum Expert programming articles. Coder of Illusion. | Ch01, Ch04, Ch05, Ch06, Ch07, Ch10 |
+| Introspec (spke) | Coder, Life on Mars. Reverse-engineered Illusion. Authored Hype articles (technical analyses, GO WEST series, DOWN_HL). Coded Eager demo. | Ch01--Ch12, Ch15, Ch23 |
+| n1k-o | Musician, Skrju. Composed Eager soundtrack. Developed hybrid drum technique with Introspec. | Ch09, Ch12 |
+| diver4d | Coder, 4D+TBK (Triebkraft). GABBA demo (CAFe 2019). Pioneered video-editor sync workflow (Luma Fusion). | Ch09, Ch12 |
+| DenisGrachev | Coder. Old Tower, GLUF engine, Ringo engine, Dice Legends. RET-chaining technique. | Ch03, Ch08 |
+| Robus | Coder. Z80 threading system, WAYHACK demo. | Ch12 |
+| psndcj (cyberjack) | Coder, 4D+TBK (Triebkraft). AY/TurboSound expertise. Break Space demo (Magen Fractal effect). | Ch01, Ch07, Ch14 |
+| Screamer (sq) | Coder, Skrju. Chunky pixel optimisation research (Born Dead #05, Hype). Development environment guide. | Ch01, Ch07 |
+| Ped7g | Peter Helcmanovsky. sjasmplus maintainer, ZX Spectrum Next contributor. Signed arithmetic and RLE feedback. | Ch04, Ch14, App F |
+| RST7 | Coder. Dual-counter DOWN_HL optimisation. | Ch02 |
 
 ### Demos y producciones clave
 
-| Nombre | Autor/grupo | Año | Capítulos |
-|--------|-------------|-----|-----------|
+| Name | Author/Group | Year | Chapters |
+|------|-------------|------|----------|
 | Illusion | X-Trade (Dark) | 1996 | Ch01, Ch04, Ch05, Ch06, Ch07, Ch10 |
 | Eager (to live) | Introspec / Life on Mars | 2015 | Ch02, Ch03, Ch09, Ch10, Ch12 |
 | GABBA | diver4d / 4D+TBK | 2019 | Ch12 |

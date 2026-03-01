@@ -16,11 +16,11 @@ Al final, tendrás un esqueleto de juego funcional con 16 entidades activas -- u
 
 Todo juego en el ZX Spectrum sigue el mismo ritmo fundamental:
 
-```
-1. HALT          -- esperar la interrupción de fotograma
-2. Read input    -- ¿qué quiere el jugador?
-3. Update state  -- mover entidades, ejecutar IA, verificar colisiones
-4. Render        -- dibujar el fotograma
+```text
+1. HALT          -- wait for the frame interrupt
+2. Read input    -- what does the player want?
+3. Update state  -- move entities, run AI, check collisions
+4. Render        -- draw the frame
 5. Go to 1
 ```
 
@@ -28,7 +28,7 @@ Este es el bucle de juego. No es complicado. Su poder viene del hecho de que se 
 
 Aquí está la implementación mínima:
 
-```z80
+```z80 id:ch18_the_main_loop_2
     ORG  $8000
 
     ; Install IM1 interrupt handler (standard for games)
@@ -79,6 +79,7 @@ Ese 11.7% de margen es tu margen de seguridad. Si lo consumes, empiezas a perder
 
 En el Agon, la misma lógica de juego se ejecuta en una fracción del presupuesto. La actualización de entidades, la detección de colisiones y la lectura de entrada podrían consumir 15,000 T-states en total -- aproximadamente el 4% del fotograma del Agon. El VDP maneja el renderizado de sprites en el coprocesador ESP32, así que el coste de sprites del lado de la CPU se reduce al overhead de comandos VDU. Tienes un enorme margen para IA más compleja, más entidades, o simplemente menos estrés.
 
+<!-- figure: ch18_game_loop -->
 ![Game loop architecture](illustrations/output/ch18_game_loop.png)
 
 ---
@@ -91,7 +92,7 @@ La forma más limpia de organizar estos es una **máquina de estados**: una vari
 
 ### Definiciones de Estado
 
-```z80
+```z80 id:ch18_state_definitions
 ; Game states (byte values, used as table offsets)
 STATE_TITLE     EQU  0
 STATE_MENU      EQU  2      ; x2 because each table entry is 2 bytes
@@ -105,7 +106,7 @@ game_state:     DB   STATE_TITLE
 
 ### La Tabla de Saltos
 
-```z80
+```z80 id:ch18_the_jump_table
 ; Table of handler addresses, indexed by state
 state_table:
     DW   state_title        ; STATE_TITLE   = 0
@@ -119,7 +120,7 @@ state_table:
 
 El bucle principal se convierte en un despachador que lee el estado actual y salta al manejador apropiado:
 
-```z80
+```z80 id:ch18_the_dispatcher
 main_loop:
     halt                    ; sync to frame
 
@@ -141,7 +142,7 @@ La instrucción `JP (HL)` es la clave. No salta a la dirección almacenada *en* 
 
 Cada manejador ejecuta su propia lógica y luego salta de vuelta a `main_loop`:
 
-```z80
+```z80 id:ch18_the_dispatcher_2
 state_title:
     call draw_title_screen
     call read_input
@@ -202,7 +203,7 @@ state_gameover:
 
 Podrías estar tentado a escribir el despachador como:
 
-```z80
+```z80 id:ch18_why_not_a_chain_of
     ld   a, (game_state)
     cp   STATE_TITLE
     jp   z, state_title
@@ -221,7 +222,7 @@ Segundo, y más importante, la tabla de saltos escala limpiamente. Añadir un se
 
 Las transiciones de estado ocurren escribiendo un nuevo valor en `game_state`. Típicamente también llamas a una rutina de inicialización para el nuevo estado:
 
-```z80
+```z80 id:ch18_state_transitions
 ; Transition: Game -> Game Over
 game_over_transition:
     ld   a, STATE_GAMEOVER
@@ -255,7 +256,7 @@ El mapa de semi-filas:
 
 Los controles estándar de juego -- Q/A/O/P para arriba/abajo/izquierda/derecha y SPACE para disparar -- abarcan tres semi-filas. Aquí hay una rutina que los lee y empaqueta el resultado en un solo byte:
 
-```z80
+```z80 id:ch18_zx_spectrum_keyboard
 ; Input flag bits
 INPUT_RIGHT  EQU  0
 INPUT_LEFT   EQU  1
@@ -317,7 +318,7 @@ Con aproximadamente 220 T-states en el peor caso, la lectura de entrada es trivi
 
 La interfaz Kempston es aún más simple. Una lectura de puerto devuelve las cinco direcciones más disparo:
 
-```z80
+```z80 id:ch18_kempston_joystick
 ; Kempston joystick port
 KEMPSTON_PORT  EQU  $1F
 
@@ -334,7 +335,7 @@ read_kempston:
 
 Observa algo conveniente: la disposición de bits Kempston coincide exactamente con nuestras definiciones de banderas `INPUT_*`. Esto no es coincidencia -- la interfaz Kempston fue diseñada con este estándar en mente, y la mayoría de los juegos de Spectrum adoptan el mismo orden de bits. Si soportas tanto teclado como joystick, puedes combinar los resultados con OR:
 
-```z80
+```z80 id:ch18_kempston_joystick_2
 read_input:
     call read_keyboard       ; D = keyboard flags
     push de
@@ -353,7 +354,7 @@ Para algunas acciones -- disparar una bala, abrir un menú -- quieres responder 
 
 La técnica: almacenar la entrada del fotograma anterior junto con la del fotograma actual, y hacer XOR entre ellas para encontrar los bits que cambiaron:
 
-```z80
+```z80 id:ch18_edge_detection_press_vs_hold
 input_flags:      DB  0    ; current frame
 input_prev:       DB  0    ; previous frame
 input_pressed:    DB  0    ; newly pressed this frame (edges)
@@ -384,7 +385,7 @@ El Agon lee su teclado PS/2 a través de la API MOS (Machine Operating System). 
 
 La variable de sistema MOS `sysvar_keyascii` (en la dirección $0800 + desplazamiento) contiene el código ASCII de la tecla más recientemente presionada, o 0 si ninguna tecla está pulsada. Para controles de juego, típicamente consultas esta variable o usas las llamadas de API MOS `waitvblank` / teclado:
 
-```z80
+```z80 id:ch18_agon_light_2_ps_2_keyboard
 ; Agon: Read keyboard via MOS sysvar
 ; MOS sysvar_keyascii at IX+$05
 read_input_agon:
@@ -416,7 +417,7 @@ Una entidad de juego es cualquier cosa que se mueve, anima, interactúa o necesi
 
 Aquí está la estructura de entidad que usaremos a lo largo de los capítulos de desarrollo de juegos:
 
-```
+```text
 Offset  Size  Name        Description
 ------  ----  ----------  -------------------------------------------
  +0     2     x           X position, 8.8 fixed-point (high=pixel, low=subpixel)
@@ -434,7 +435,7 @@ Offset  Size  Name        Description
 
 Bits de bandera en el byte `flags`:
 
-```
+```text id:ch18_structure_layout_2
 Bit 0: ACTIVE      -- entity is alive and should be updated/rendered
 Bit 1: VISIBLE     -- entity should be rendered (active but invisible = logic only)
 Bit 2: COLLIDABLE  -- entity participates in collision detection
@@ -448,7 +449,7 @@ Bit 6-7: reserved
 
 Diez bytes es una elección deliberada. Es lo suficientemente pequeño para que 16 entidades ocupen solo 160 bytes -- trivial en términos de memoria. Más importante aún, multiplicar un índice de entidad por 10 para encontrar su desplazamiento es sencillo en el Z80:
 
-```z80
+```z80 id:ch18_why_10_bytes
 ; Calculate entity address from index in A
 ; Input: A = entity index (0-15)
 ; Output: HL = address of entity structure
@@ -482,7 +483,7 @@ La posición Y es solo de 8 bits porque la pantalla del Spectrum tiene 192 píxe
 
 La aritmética de punto fijo se introdujo en el Capítulo 4. Aquí hay un repaso rápido de cómo se aplica al movimiento de entidades:
 
-```z80
+```z80 id:ch18_the_8_8_fixed_point_system
 ; Move entity right at velocity dx
 ; HL points to entity X (2 bytes: low=fractional, high=pixel)
 ; A = dx (signed velocity, treated as fractional byte)
@@ -518,7 +519,7 @@ La belleza del punto fijo: la suma y la resta son simplemente operaciones regula
 
 Las entidades viven en un array asignado estáticamente. Sin asignación dinámica de memoria, sin listas enlazadas, sin heap. Los arrays estáticos son el enfoque estándar en el Z80 por una buena razón: son rápidos, predecibles, y no pueden fragmentarse.
 
-```z80
+```z80 id:ch18_the_entity_array
 ; Entity array: 16 entities, 10 bytes each = 160 bytes
 MAX_ENTITIES    EQU  16
 ENTITY_SIZE     EQU  10
@@ -531,7 +532,7 @@ entity_array:
 
 La ranura 0 es siempre el jugador. Las ranuras 1-8 son enemigos. Las ranuras 9-15 son proyectiles y efectos (balas, explosiones, popups de puntuación). Esta partición fija simplifica el código: cuando necesitas iterar sobre enemigos para la IA, iteras las ranuras 1-8. Cuando una bala necesita generarse, buscas en las ranuras 9-15. El jugador está siempre en una dirección conocida.
 
-```z80
+```z80 id:ch18_entity_slot_allocation
 ; Fixed slot assignments
 SLOT_PLAYER      EQU  0
 SLOT_ENEMY_FIRST EQU  1
@@ -544,7 +545,7 @@ SLOT_PROJ_LAST   EQU  15
 
 El bucle de actualización central recorre cada ranura de entidad, verifica la bandera ACTIVE, y llama al manejador de actualización apropiado:
 
-```z80
+```z80 id:ch18_iterating_entities
 ; Update all active entities
 ; Total cost: ~2,500T for 16 entities (most inactive), up to ~8,000T (all active)
 update_entities:
@@ -576,7 +577,7 @@ Esto usa IX como puntero de entidad, lo cual es conveniente porque el direcciona
 
 Cada tipo de entidad tiene su propio manejador de actualización. Usamos la misma técnica de tabla de saltos que la máquina de estados del juego:
 
-```z80
+```z80 id:ch18_update_dispatch_by_type
 ; Entity type constants
 TYPE_INACTIVE  EQU  0
 TYPE_PLAYER    EQU  1
@@ -614,7 +615,7 @@ Cada manejador recibe IX apuntando a la entidad y puede acceder a todos los camp
 
 Aquí hay una actualización típica del jugador -- leer banderas de entrada, aplicar movimiento, actualizar animación:
 
-```z80
+```z80 id:ch18_the_player_update_handler
 ; Update player entity
 ; IX = entity pointer (slot 0)
 update_player:
@@ -665,7 +666,7 @@ Ya tenemos el pool -- es el array de entidades. Las ranuras 9-15 son el pool de 
 
 ### Generando una Bala
 
-```z80
+```z80 id:ch18_spawning_a_bullet
 ; Spawn a bullet at position (B=x_pixel, C=y)
 ; moving in direction determined by player facing
 ; Returns: carry set if no free slot available
@@ -678,9 +679,10 @@ spawn_bullet:
     bit  0, a               ; 8T   ACTIVE?
     jr   z, .found          ; 12/7T found an inactive slot
 
-    ld   e, ENTITY_SIZE     ; 7T
-    add  ix, de             ; 15T  next slot (note: DE high byte may be nonzero,
-                            ;      but we only care about the low 8 bits of offset)
+    push de                 ; 11T  save loop counter (D)
+    ld   de, ENTITY_SIZE    ; 10T  DE = 10 (D=0, E=10)
+    add  ix, de             ; 15T  next slot
+    pop  de                 ; 10T  restore loop counter
     dec  d                  ; 4T
     jr   nz, .find_slot     ; 12T
 
@@ -717,7 +719,7 @@ spawn_bullet:
 
 Cuando una bala sale de la pantalla o una explosión termina su animación, la desactivación es una sola instrucción:
 
-```z80
+```z80 id:ch18_deactivating_an_entity
 ; Deactivate entity at IX
 deactivate_entity:
     ld   (ix + 9), 0        ; 19T  clear all flags (ACTIVE=0)
@@ -728,7 +730,7 @@ Eso es todo. El siguiente fotograma, el bucle de actualización ve ACTIVE=0 y sa
 
 ### Manejador de Actualización de Bala
 
-```z80
+```z80 id:ch18_bullet_update_handler
 ; Update a bullet entity
 ; IX = entity pointer
 update_bullet:
@@ -777,7 +779,7 @@ En el Agon, puedes permitirte pools más grandes. Con 360,000 T-states por fotog
 
 Las explosiones, popups de puntuación y efectos de partículas usan las mismas ranuras de entidad que las balas. La diferencia está en sus manejadores de actualización: animan a través de una secuencia de fotogramas y luego se autodestruyen.
 
-```z80
+```z80 id:ch18_explosion_and_effect_entities
 ; Update an explosion entity
 ; IX = entity pointer
 update_explosion:
@@ -798,7 +800,7 @@ update_explosion:
 
 Para generar una explosión cuando un enemigo muere:
 
-```z80
+```z80 id:ch18_explosion_and_effect_entities_2
 ; Spawn explosion at the enemy's position
 ; IX currently points to the dying enemy
 spawn_explosion_at_entity:
@@ -844,7 +846,7 @@ El patrón es siempre el mismo: encontrar una ranura libre, rellenar la estructu
 
 Aquí está el esqueleto de juego completo que une todo. Este es un framework compilable con todas las piezas conectadas: máquina de estados, entrada, sistema de entidades, y el bucle principal.
 
-```z80
+```z80 id:ch18_putting_it_all_together_the
     ORG  $8000
 
 ; ============================================================
@@ -881,7 +883,10 @@ FLAG_FACING_L   EQU  3
 ; ============================================================
 entry:
     di
-    ld   sp, $FFFF          ; set stack
+    ld   sp, $C000          ; set stack (below banked memory on 128K)
+                            ; NOTE: $FFFF is in banked page on 128K Spectrum,
+                            ; which causes stack corruption during bank switches.
+                            ; Use $C000 (or $BFFF) for 128K compatibility.
     im   1
     ei
 
@@ -1285,11 +1290,10 @@ spawn_bullet:
     ld   a, (ix + 9)
     bit  FLAG_ACTIVE, a
     jr   z, .found
-    ld   e, ENTITY_SIZE
-    push de
-    pop  de                  ; (DE preserved; only low byte matters for add ix,de)
-    ld   e, ENTITY_SIZE
+    push de                  ; save loop counter in D
+    ld   de, ENTITY_SIZE     ; DE = 10 (D=0, E=10)
     add  ix, de
+    pop  de                  ; restore loop counter
     dec  d
     jr   nz, .find
     ; No free slot
@@ -1438,7 +1442,7 @@ El direccionamiento indexado por IX es conveniente pero costoso: 19 T-states por
 
 Pero en el bucle de renderizado, donde podrías tocar 4-6 campos de entidad para cada uno de 8 sprites visibles, el coste se acumula. La técnica: al inicio del pase de renderizado para cada entidad, copia los campos que necesitas a registros:
 
-```z80
+```z80 id:ch18_when_to_use_hl_instead_of_ix
     ; Copy entity fields to registers for fast rendering
     ld   l, (ix + 0)        ; 19T  X lo
     ld   h, (ix + 1)        ; 19T  X hi

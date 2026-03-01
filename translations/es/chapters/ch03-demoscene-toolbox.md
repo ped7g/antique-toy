@@ -12,7 +12,7 @@ Estos patrones --- bucles desenrollados, codigo auto-modificable, la pila como c
 
 Considera el bucle interno mas simple posible: borrar 256 bytes de memoria.
 
-```z80
+```z80 id:ch03_the_cost_of_looping
 ; Looped version: clear 256 bytes at (HL)
     ld   b, 0            ; 7 T   (B=0 means 256 iterations)
     xor  a               ; 4 T
@@ -22,13 +22,11 @@ Considera el bucle interno mas simple posible: borrar 256 bytes de memoria.
     djnz .loop           ; 13 T  (8 on last iteration)
 ```
 
-Cada iteracion cuesta 7 + 6 + 13 = 26 T-states para almacenar un solo byte. Solo 7 de esos T-states hacen trabajo util --- el resto es sobrecarga. Eso es un 73% de desperdicio. Para 256 bytes: 256 x 26 - 5 = 6.651 T-states. En una maquina donde tienes 69.888 T-states por fotograma, esos T-states desperdiciados duelen.
-
-### Desenrollar: intercambiar RAM por velocidad
+### Desenrollado: intercambiar RAM por velocidad
 
 La solucion es brutal y efectiva: escribe el cuerpo del bucle N veces y elimina el bucle.
 
-```z80
+```z80 id:ch03_unrolling_trade_ram_for_speed
 ; Unrolled version: clear 256 bytes at (HL)
     xor  a               ; 4 T
     ld   (hl), a         ; 7 T
@@ -42,8 +40,6 @@ La solucion es brutal y efectiva: escribe el cuerpo del bucle N veces y elimina 
 
 Cada byte ahora cuesta 7 + 6 = 13 T-states. Sin DJNZ. Sin contador de bucle. Total: 256 x 13 = 3.328 T-states --- la mitad de la version con bucle.
 
-El coste es el tamano del codigo: 256 repeticiones ocupan 512 bytes frente a 7 del bucle. Estas intercambiando RAM por velocidad.
-
 **Cuando desenrollar:** Bucles internos que se ejecutan miles de veces por fotograma --- borrado de pantalla, dibujado de sprites, copia de datos.
 
 **Cuando NO desenrollar:** Bucles externos que se ejecutan una o dos veces por fotograma. Ahorrar 5 T-states en 24 iteraciones te da 120 T-states --- menos de tres NOPs. No vale la pena el aumento de tamano.
@@ -56,7 +52,7 @@ El Z80 no tiene cache de instrucciones, ni buffer de prebusqueda, ni pipeline. C
 
 El codigo auto-modificable (SMC) significa escribir en los bytes de instruccion en tiempo de ejecucion. El patron clasico es parchear un operando inmediato:
 
-```z80
+```z80 id:ch03_self_modifying_code_the_z80_s
 ; Self-modifying code: fill with a runtime-determined value
     ld   a, (fill_value)       ; load the fill byte from somewhere
     ld   (patch + 1), a        ; overwrite the operand of the LD below
@@ -72,7 +68,7 @@ El `ld (patch + 1), a` escribe en el operando inmediato del siguiente `ld (hl), 
 
 **Guardar y restaurar el puntero de pila.** Este patron aparece constantemente al usar trucos de PUSH (mas abajo):
 
-```z80
+```z80 id:ch03_self_modifying_code_the_z80_s_2
     ld   (restore_sp + 1), sp     ; save SP into the operand below
     ; ... do stack tricks ...
 restore_sp:
@@ -80,6 +76,26 @@ restore_sp:
 ```
 
 El `ld (nn), sp` guarda el SP actual directamente en el operando del posterior `ld sp, nn`. Sin variable temporal. Este es codigo idiomatico de demoscene Z80.
+
+### Variables auto-modificables: el patrón `$+1`
+
+El patrón de SMC más extendido en el ZX Spectrum no es parchear opcodes ni guardar SP --- es incrustar una *variable* directamente dentro del operando inmediato de una instrucción. La idea es simple: en lugar de almacenar un contador en una ubicación de memoria con nombre y cargarlo con `LD A,(nn)` a 13 T-states, dejas que el propio byte del operando de la instrucción *sea* la variable.
+
+```z80 id:ch03_smc_dollar_plus_one
+.smc_counter:
+    ld   a, 0                    ; 7T — this 0 is the "variable"
+    inc  a                       ; 4T
+    ld   (.smc_counter + 1), a   ; 13T — write back to the operand byte
+```
+
+En sjasmplus, puedes colocar una etiqueta en `$+1` para darle un nombre legible a la variable incrustada:
+
+```z80 id:ch03_smc_named_variable
+    ld   a, 0                    ; 7T
+.scroll_pos EQU $ - 1           ; .scroll_pos names the operand byte above
+    add  a, 4                   ; 7T — advance by 4 pixels
+    ld   (.scroll_pos), a       ; 13T — store back into the operand
+```
 
 **Una nota de precaucion.** El SMC es seguro en el Z80, el eZ80 y cada clon de Spectrum. *No* es seguro en CPUs modernas con cache (x86, ARM) sin instrucciones explicitas de vaciado de cache. Si portas a una arquitectura diferente, esto es lo primero que se rompe.
 
@@ -111,9 +127,27 @@ El patron es siempre el mismo:
 4. Cargar tus datos en pares de registros y hacer PUSH repetidamente.
 5. Restaurar SP y rehabilitar interrupciones (EI).
 
+<!-- figure: ch03_push_fill_pipeline -->
+
+```mermaid id:ch03_the_technique
+graph TD
+    A["DI — disable interrupts"] --> B["Save SP via self-modifying code"]
+    B --> C["Set SP to screen bottom ($5800)"]
+    C --> D["Load register pairs with fill data"]
+    D --> E["PUSH loop: 16 PUSHes per iteration<br>11T × 16 = 176T → 32 bytes"]
+    E --> F{All 192<br>iterations done?}
+    F -- No --> E
+    F -- Yes --> G["Restore SP from self-modified LD SP,nn"]
+    G --> H["EI — re-enable interrupts"]
+
+    style E fill:#f9f,stroke:#333
+    style A fill:#fdd,stroke:#333
+    style H fill:#fdd,stroke:#333
+```
+
 Aqui esta el nucleo del ejemplo `push_fill.a80` del directorio `examples/` de este capitulo:
 
-```z80
+```z80 id:ch03_the_technique_2
 stack_fill:
     di                          ; critical: no interrupts while SP is moved
     ld   (restore_sp + 1), sp   ; self-modifying: save SP
@@ -149,6 +183,19 @@ restore_sp:
 
 El cuerpo interno de 16 PUSHes escribe 32 bytes en 176 T-states. Total para los 6.144 bytes del area de pixeles completa: aproximadamente 36.000 T-states. Compara con LDIR: 6.144 x 21 - 5 = 129.019 T-states. El metodo PUSH es aproximadamente 3,6 veces mas rapido --- la diferencia entre caber en un fotograma y desbordar al siguiente.
 
+### POP como lectura rápida
+
+PUSH es la escritura más rápida, pero POP es la *lectura* más rápida. POP carga 2 bytes de (SP) en un par de registros en 10 T-states --- eso son 5,0 T-states por byte. Comparemos las alternativas:
+
+| Método | Bytes leídos | T-states | T-states por byte |
+|--------|-----------|----------|-------------------|
+| `ld a, (hl)` + `inc hl` | 1 | 13 | 13,0 |
+| `ld a, (hl)` + `inc l` | 1 | 11 | 11,0 |
+| `ldi` (como lectura+escritura) | 1 | 16 | 16,0 |
+| `pop hl` | 2 | 10 | **5,0** |
+
+El patrón: pre-construir una tabla de valores de 16 bits en memoria, apuntar SP al inicio de la tabla, y hacer POP en pares de registros. Cada POP avanza SP en 2, recorriendo la tabla automáticamente. Este es el complemento de lectura del truco PUSH de escritura.
+
 ### Donde se usan los trucos de PUSH
 
 - **Borrado de pantalla.** El uso mas comun. Toda demo necesita borrar la pantalla entre efectos.
@@ -177,7 +224,7 @@ Para 256 bytes:
 - 256 x LDI: 256 x 16 = 4.096 T-states
 - Ahorro: 1.275 T-states (24%)
 
-Una cadena de instrucciones LDI individuales son solo 256 repeticiones del opcode de dos bytes `$ED $A0`. Eso son 512 bytes de codigo para ahorrar un 24% --- el mismo intercambio de RAM por velocidad que el desenrollado de bucles.
+Una cadena de instrucciones LDI individuales son solo 256 repeticiones del código de operación de dos bytes `$ED $A0`. Eso son 512 bytes de código para ahorrar un 24% --- el mismo intercambio de RAM por velocidad que el desenrollado de bucles.
 
 ### Cuando las cadenas LDI brillan
 
@@ -185,7 +232,7 @@ El punto ideal es copiar bloques de tamano conocido. Una cadena de 32 LDIs ahorr
 
 Pero el verdadero poder emerge cuando combinas cadenas LDI con *aritmetica de punto de entrada*. Si tienes una cadena de 256 LDIs y quieres copiar solo 100 bytes, salta a la cadena en la posicion 156. Sin contador de bucle, sin configuracion. Esta tecnica se usa en el chaos zoomer de Introspec en Eager (2015):
 
-```z80
+```z80 id:ch03_when_ldi_chains_shine
 ; Chaos zoomer inner loop (simplified from Eager)
 ; Each line copies a different number of bytes from a source buffer.
 ; Entry point into the LDI chain is calculated per line.
@@ -205,11 +252,37 @@ ldi_chain:
 
 Esta copia de longitud variable con cero sobrecarga de bucle por byte es una tecnica que simplemente no puedes lograr con LDIR. Es una razon por la que LDI es el mejor amigo de todos en el codigo de demoscene.
 
+![Cadena LDI vs LDIR — las franjas rojas muestran la temporización de la cadena LDI, las franjas azules muestran LDIR; las franjas rojas más delgadas demuestran que LDI es más rápido](../../build/screenshots/ch03_ldi_chain.png)
+
+---
+
+## Trucos de Bits: SBC A,A y Compañía
+
+### SBC A,A como máscara condicional
+
+Después de cualquier instrucción que produce una bandera de acarreo, `SBC A,A` convierte esa bandera en un byte completo: $FF si el acarreo estaba activado, $00 si no. El coste: 4 T-states. Compara esto con la alternativa de ramificación --- `JR C,.set` / `LD A,0` / `JR .done` / `.set: LD A,$FF` / `.done:` --- que cuesta 17-22 T-states dependiendo de qué ruta se tome, más la interrupción de la tubería por un salto condicional.
+
+El caso de uso canónico es la *expansión de bit a byte*. Dado un byte donde cada bit representa un píxel (el formato de píxeles del Spectrum), puedes expandir cada bit en un byte de atributo completo:
+
+```z80 id:ch03_sbc_bit_expand
+    rlc  (hl)            ; rotate top bit into carry    — 15T
+    sbc  a, a            ; A = $FF if set, $00 if not   — 4T
+    and  $47             ; A = bright white ($47) or $00 — 7T
+```
+
+Tres instrucciones, 26 T-states, sin ramificaciones. Para seleccionar entre dos valores *arbitrarios* en lugar de cero y una máscara, usa el patrón `SBC A,A : AND mask : XOR base`. El AND selecciona qué bits cambian entre los dos valores, y el XOR los invierte al valor base deseado. Este patrón reemplaza cada prueba "si el bit está activado entonces valor A, si no valor B" en tus bucles internos.
+
+### ADD A,A vs SLA A
+
+Ambas instrucciones desplazan A un bit a la izquierda. Pero `ADD A,A` es 4 T-states y 1 byte, mientras que `SLA A` es 8 T-states y 2 bytes. No hay situación donde SLA A sea preferible --- `ADD A,A` es estrictamente más rápido y más pequeño. De manera similar, `ADD HL,HL` desplaza HL a la izquierda en 11 T-states (1 byte), reemplazando la secuencia de dos instrucciones `SLA L : RL H` a 16 T-states (4 bytes). Para un desplazamiento de 16 bits a la izquierda dentro de un bucle interno que se ejecuta 192 veces por fotograma, esa sustitución por sí sola ahorra 960 T-states --- más de cuatro líneas de escaneo de tiempo de borde.
+
+Estos no son trucos. Son vocabulario. Así como un hablante fluido no se detiene a conjugar verbos comunes, un programador de Z80 recurre a `ADD A,A` y `SBC A,A` sin pensarlo conscientemente. Si te encuentras escribiendo `SLA A` o un salto condicional para seleccionar entre dos valores, detente y recurre a la forma más corta. Los T-states se acumulan.
+
 ---
 
 ## Generacion de Codigo
 
-### La tecnica mas poderosa
+### Generación de código: escribir el programa que dibuja
 
 Todo lo anterior es una optimizacion fija --- el codigo se ejecuta de la misma manera cada fotograma. La generacion de codigo va mas alla: tu programa escribe el programa que dibuja la pantalla. Hay dos variantes: offline (antes del ensamblado) y en tiempo de ejecucion (durante la ejecucion).
 
@@ -225,7 +298,7 @@ Esto no es "hacer trampa". Es la vision fundamental de que la division del traba
 
 A veces los parametros cambian cada fotograma, asi que la generacion offline no es suficiente. La rutina de mapeado de esfera en Illusion de X-Trade (ENLiGHT'96) genera codigo maquina en un buffer de RAM en tiempo de ejecucion. La geometria de la esfera cambia al rotar --- diferentes pixeles necesitan diferentes distancias de salto. Antes de cada fotograma, el motor emite bytes de opcode en un buffer, luego los ejecuta:
 
-```z80
+```z80 id:ch03_runtime_the_program_writes
 ; Runtime code generation (conceptual, simplified from Illusion)
 ; Generate an unrolled rendering loop for this frame's sphere slice
 
@@ -258,6 +331,14 @@ A veces los parametros cambian cada fotograma, asi que la generacion offline no 
 
 El codigo generado es una secuencia en linea recta sin saltos, sin consultas, sin sobrecarga de bucle --- pero es *codigo diferente cada fotograma*. En lugar de "if pixel_skip == 3 then..." a 12 T-states por salto, emites las instrucciones exactas necesarias y las ejecutas sin saltos.
 
+### El coste de la generación
+
+La generación de código en tiempo de ejecución no es gratis. Mira el bucle generador de arriba: cada instrucción emitida requiere cargar un byte de código de operación, almacenarlo, avanzar el puntero, y posiblemente cargar un operando --- aproximadamente 30-50 T-states por byte emitido, dependiendo de la complejidad. Digamos ~40 T-states en promedio. Para una rutina generada de 100 bytes de instrucciones, eso son aproximadamente 4.000 T-states de sobrecarga de generación.
+
+El punto de equilibrio: la generación compensa cuando el código generado se ejecuta más de una vez por fotograma, o cuando reemplaza lógica de ramificación que cuesta más que la propia generación. En el mapeador de esferas de Illusion, cada pasada de renderizado generada se ejecuta una vez por fotograma --- pero reemplaza saltos condicionales por píxel que costarían mucho más. Alone Coder documentó un intercambio similar en su motor de rotación: generar una secuencia de instrucciones INC H/INC L para el avance de coordenadas cuesta aproximadamente 5.000 T-states emitir, pero elimina aritmética de coordenadas que costaría aproximadamente 146.000 T-states si se computara en línea. La sobrecarga de generación es menos del 4% del coste que reemplaza.
+
+La regla general: si te encuentras escribiendo un bucle que contiene ramificaciones seleccionando entre diferentes secuencias de instrucciones basándose en datos por píxel o por línea, ese bucle es candidato para generación de código. Emite las instrucciones correctas una vez, ejecútalas sin ramificaciones, y regenera solo cuando los parámetros cambien.
+
 **Cuando generar codigo:** Si las mismas operaciones ocurren cada fotograma con solo cambios de datos, el codigo auto-modificable (parchear operandos) es suficiente. Si la *estructura* cambia --- diferentes numeros de iteraciones, diferentes secuencias de instrucciones --- genera el codigo. Si puedes precomputar las variaciones en una maquina moderna, prefiere la generacion offline: es depurable, verificable e impone cero coste en tiempo de ejecucion. La generacion en tiempo de ejecucion vale la pena cuando el codigo generado se ejecuta mucho mas frecuentemente de lo que cuesta generarlo.
 
 ---
@@ -268,7 +349,7 @@ El codigo generado es una secuencia en linea recta sin saltos, sin consultas, si
 
 En 2025, DenisGrachev publico una tecnica en Hype desarrollada para su juego Dice Legends. El problema: renderizar un campo de juego basado en tiles requiere dibujar docenas de tiles por fotograma. El enfoque ingenuo usa CALL:
 
-```z80
+```z80 id:ch03_turning_the_stack_into_a
 ; Naive approach: call each tile renderer
     call draw_tile_0
     call draw_tile_1
@@ -280,7 +361,7 @@ Cada CALL cuesta 17 T-states. Para un campo de juego de 30 x 18 (540 tiles), son
 
 La idea de DenisGrachev: establecer SP a una *lista de renderizado* --- una tabla de direcciones --- y terminar cada procedimiento de dibujo de tile con RET. RET saca 2 bytes de (SP) y los pone en PC. Si SP apunta a tu lista de renderizado, RET no retorna al llamador --- salta a la siguiente rutina en la lista.
 
-```z80
+```z80 id:ch03_turning_the_stack_into_a_2
 ; RET-chaining: zero call overhead
     di
     ld   (restore_sp + 1), sp   ; save SP
@@ -346,14 +427,15 @@ El ensayo de Introspec es un desafio, no una rendicion. Posteriormente publico a
 
 Las tecnicas de este capitulo no son independientes. En la practica, se componen:
 
-- **El borrado de pantalla** combina *bucles desenrollados* con *trucos de PUSH*: un bucle parcialmente desenrollado de 16 PUSHes por iteracion, con SP secuestrado via *codigo auto-modificable*.
-- **Los sprites compilados** combinan *generacion de codigo* (cada sprite se compila a codigo ejecutable), *salida PUSH* (la forma mas rapida de escribir datos de pixel) y *auto-modificacion* (parcheando direcciones de pantalla por fotograma).
-- **Los motores de tiles** combinan *RET-encadenamiento* para despacho con *cadenas LDI* dentro de cada rutina de tile para copia rapida de datos.
-- **Los chaos zoomers** combinan *generacion de codigo offline* (scripts de Processing emitiendo ensamblador) con *cadenas LDI* (el codigo generado es mayormente secuencias LDI) y *auto-modificacion* (parcheando direcciones fuente por fotograma).
+- **El borrado de pantalla** combina *bucles desenrollados* con *trucos PUSH*: un bucle parcialmente desenrollado de 16 PUSHes por iteración, con SP secuestrado vía *código auto-modificable*.
+- **Los sprites compilados** combinan *generación de código* (cada sprite se compila a código ejecutable), *lecturas POP* y *salida PUSH* (la forma más rápida de mover datos de píxeles a través de registros), *trucos de bits* (SBC A,A para expansión de máscara) y *auto-modificación* (parcheando direcciones de pantalla por fotograma).
+- **Los motores de tiles** combinan *encadenamiento RET* para despacho con *cadenas LDI* dentro de cada rutina de tile para copia rápida de datos.
+- **Los chaos zoomers** combinan *generación de código offline* (scripts de Processing emitiendo ensamblador) con *cadenas LDI* (el código generado es mayormente secuencias LDI) y *auto-modificación* (parcheando direcciones fuente por fotograma).
+- **Los efectos de atributos** combinan *lecturas POP* de tablas precalculadas con *trucos de bits* (SBC A,A para expandir máscaras de bits en valores de color) y *escrituras PUSH* para salida rápida de atributos.
 
-El hilo comun: cada tecnica elimina algo del bucle interno. Desenrollar elimina el contador de bucle. La auto-modificacion elimina saltos. PUSH elimina la sobrecarga por byte. Las cadenas LDI eliminan la penalizacion de repeticion de LDIR. La generacion de codigo elimina toda la distincion entre codigo y datos. El RET-encadenamiento elimina la sobrecarga de CALL.
+El hilo común: cada técnica elimina algo del bucle interno. Desenrollar elimina el contador de bucle. La auto-modificación elimina saltos. PUSH elimina la sobrecarga de escritura por byte. POP elimina la sobrecarga de lectura por byte. Las cadenas LDI eliminan la penalización de repetición de LDIR. Los trucos de bits eliminan saltos condicionales. La generación de código elimina toda la distinción entre código y datos. El encadenamiento RET elimina la sobrecarga de CALL.
 
-El Z80 funciona a 3,5 MHz. Tienes 69.888 T-states por fotograma. Cada T-state que ahorras en el bucle interno es un T-state que puedes gastar en mas pixeles, mas colores, mas movimiento. La caja de herramientas de este capitulo es como llegas alli.
+El Z80 funciona a 3,5 MHz. Tienes 71.680 T-states por fotograma. Cada T-state que ahorras en el bucle interno es un T-state que puedes gastar en más píxeles, más colores, más movimiento. La caja de herramientas de este capítulo es cómo llegas allí.
 
 En los capitulos que siguen, veras cada una de estas tecnicas en accion en demos reales --- la esfera texturizada de Illusion, el tunel de atributos de Eager, el motor multicolor de Old Tower. El objetivo de este capitulo fue darte el vocabulario. Ahora veamos que construyeron los maestros con el.
 
@@ -368,5 +450,9 @@ En los capitulos que siguen, veras cada una de estas tecnicas en accion en demos
 3. **Cronometra una cadena LDI.** Escribe una copia de 32 bytes usando LDIR y otra usando 32 x LDI. Mide ambas con la tecnica del color de borde. La cadena LDI deberia ahorrar 160 T-states --- visible si ejecutas la copia en un bucle ajustado.
 
 4. **Experimenta con puntos de entrada.** Construye una cadena LDI de 128 entradas y una pequena rutina que calcule un punto de entrada basado en un valor en el registro A (0--128). Salta a la cadena en diferentes puntos. Esta es una version simplificada de la copia de longitud variable usada en los chaos zoomers reales.
+
+5. **Copiador de longitud variable con entrada calculada.** Construye una cadena LDI de 256 entradas y un frontal que acepte un conteo de bytes en el registro B (1--256). Calcula el punto de entrada: cada LDI son 2 bytes, así que el desplazamiento es (256 - B) x 2 desde el inicio de la cadena. Suma esto a la dirección base de la cadena, luego JP (HL) hacia ella. Envuelve todo en el arnés de temporización de color de borde y compara el ancho de la franja contra LDIR para el mismo conteo de bytes. Para conteos pequeños (menos de 16), la diferencia es mínima. Para conteos superiores a 64, la cadena LDI se adelanta visiblemente.
+
+6. **Desempaquetador de bit a atributo.** Escribe una rutina que lea un byte de (HL), rote cada bit con RLC (HL), y use `SBC A,A : AND $47` para expandir cada bit en un byte de atributo (blanco brillante o negro). Almacena los 8 bytes de atributo resultantes en un búfer de destino usando (DE) / INC DE. Esta es la semilla del escritor de atributos de un sprite compilado --- en capítulos posteriores verás este patrón generar rutinas de sprites completas.
 
 > **Fuentes:** DenisGrachev "Tiles and RET" (Hype, 2025); Introspec "Making of Eager" (Hype, 2015); Introspec "Technical Analysis of Illusion" (Hype, 2017); Introspec "Code is Dead" (Hype, 2015)

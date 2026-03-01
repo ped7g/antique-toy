@@ -32,7 +32,7 @@ La ranura superior de 16 KB en `$C000`-`$FFFF` es la flexible. Escribe en el pue
 
 El puerto `$7FFD` controla la configuración de memoria en el 128K. Es de solo escritura -- no puedes leerlo de vuelta. Esto significa que debes guardar su valor como sombra en una variable de RAM si necesitas conocer el estado actual.
 
-```
+```text id:ch15_the_7ffd_port_bank_switching
 Port $7FFD bit layout:
   Bit 0-2:  RAM page mapped at $C000 (0-7)
   Bit 3:    Screen select (0 = normal screen at page 5,
@@ -45,7 +45,7 @@ Port $7FFD bit layout:
 
 Una rutina típica de cambio de banco:
 
-```z80
+```z80 id:ch15_the_7ffd_port_bank_switching_2
 ; Switch RAM page at $C000 to page number in A (0-7)
 ; Preserves other $7FFD bits from shadow variable
 bank_switch:
@@ -85,6 +85,7 @@ La restricción crítica: **tu manejador de interrupciones y bucle principal deb
 
 **Regla:** nunca pongas código crítico en tiempo en una página con banco a menos que estés absolutamente seguro de qué página está activa cuando ese código se ejecuta.
 
+<!-- figure: ch15_memory_map -->
 ![ZX Spectrum 128K memory map](illustrations/output/ch15_memory_map.png)
 
 ---
@@ -101,13 +102,13 @@ En las máquinas Sinclair originales, la ULA y la CPU comparten un bus de memori
 
 Las páginas contendidas difieren entre modelos:
 
-| Modelo | Páginas contendidas | Siempre rápidas |
+| Model | Contended Pages | Always Fast |
 |-------|----------------|-------------|
-| 48K | Toda la RAM (`$4000`-`$FFFF`) | Ninguna (pero `$8000`+ es menos contendida en la práctica) |
-| 128K / +2 | Páginas 1, 3, 5, 7 | Páginas 0, 2, 4, 6 |
-| +2A / +2B / +3 | Páginas 4, 5, 6, 7 | Páginas 0, 1, 2, 3 |
+| 48K | Page 5 only (`$4000`-`$7FFF`) | `$8000`-`$FFFF` (uncontended) |
+| 128K / +2 | Pages 1, 3, 5, 7 | Pages 0, 2, 4, 6 |
+| +2A / +2B / +3 | Pages 4, 5, 6, 7 | Pages 0, 1, 2, 3 |
 
-El 48K es el peor caso -- toda la RAM está contendida. En el 128K, el patrón es cada página impar. En el +2A/+3, se invierte: las páginas altas están contendidas.
+The 48K contends only the lower 16 KB of RAM (`$4000`-`$7FFF`, page 5) -- the upper 32 KB (`$8000`-`$FFFF`) is uncontended. On the 128K, the pattern is every odd page. On the +2A/+3, it flips: the high pages are contended.
 
 Esto tiene consecuencias prácticas inmediatas. En un 128K, tu código principal en `$8000` (página 2) está en memoria no contendida -- rápido. La pantalla en `$4000` (página 5) está contendida -- las escrituras a la memoria de pantalla son más lentas durante la visualización activa. Y la página 7 (la pantalla sombra) también está contendida, lo que significa que los rellenos de doble búfer a la pantalla sombra son más lentos de lo que podrías esperar en hardware original.
 
@@ -158,7 +159,7 @@ El fotograma se divide en tres regiones. La interrupción se dispara al inicio d
 
 **Pentagon 128 (71.680 T-states)**
 
-```
+```text
 Interrupt ──┐
             │
 Top border  │  80 lines × 224T = 17,920T   No screen reads. No contention.
@@ -173,7 +174,7 @@ border      │
 
 **ZX Spectrum 128K (70.908 T-states)**
 
-```
+```text
 Interrupt ──┐
             │
 Top border  │  63 lines × 228T = 14,364T   No screen reads. No contention.
@@ -188,7 +189,7 @@ border      │
 
 **ZX Spectrum 48K (69.888 T-states)**
 
-```
+```text
 Interrupt ──┐
             │
 Top border  │  64 lines × 224T = 14,336T   No screen reads. No contention.
@@ -209,7 +210,7 @@ Cada línea de escaneo se descompone en una porción activa (donde la ULA lee da
 
 **48K y Pentagon (224 T-states por línea):**
 
-```
+```text
 128T  active pixel area (ULA reads screen data)
  24T  right border
  48T  horizontal sync + retrace
@@ -218,7 +219,7 @@ Cada línea de escaneo se descompone en una porción activa (donde la ULA lee da
 
 **128K (228 T-states por línea):**
 
-```
+```text
 128T  active pixel area (ULA reads screen data)
  24T  right border
  52T  horizontal sync + retrace
@@ -337,7 +338,7 @@ El ZX Spectrum Next es el buque insignia moderno de la plataforma: una máquina 
 
 La **MMU** del Next es fundamentalmente diferente de la conmutación de bancos del 128K. En lugar de una ranura conmutable de 16 KB, el Next divide todo el espacio de direcciones de 64 KB en ocho ranuras de 8 KB. Cada ranura puede ser mapeada independientemente a cualquier página de 8 KB del pool de 1-2 MB de RAM. Esto significa que puedes tener control de grano fino:
 
-```z80
+```z80 id:ch15_zx_spectrum_next
 ; Map 8KB page $0A into slot 3 ($6000-$7FFF)
     ld   a, $0A
     ld   bc, $243B          ; Next register select port
@@ -370,7 +371,7 @@ El Agon Light 2 es la segunda plataforma para nuestros capítulos de desarrollo 
 
 La característica definitoria del Agon es la división entre el **eZ80** (tu CPU) y el **ESP32** (el VDP, Video Display Processor):
 
-```
+```text
                         +-----------+
                         |   eZ80    |  18.432 MHz
                         |  512 KB   |  Your code runs here
@@ -387,14 +388,14 @@ La característica definitoria del Agon es la división entre el **eZ80** (tu CP
                         +-----------+
 ```
 
-Esta división tiene consecuencias profundas:
+This split has important consequences:
 
 1. **Sin memoria de vídeo compartida.** No puedes escribir directamente a un framebuffer. Cada píxel, cada sprite, cada operación de baldosa es un *comando* enviado a través del enlace serial del eZ80 al ESP32.
 2. **Latencia.** El enlace serial funciona a 384.000 baudios. Un solo byte de comando toma aproximadamente 26 microsegundos para transmitirse. Operaciones de dibujo complejas (rellenar rectángulo, dibujar bitmap) requieren múltiples bytes y el VDP necesita tiempo para ejecutarlas.
 3. **Renderizado asíncrono.** El VDP procesa comandos desde un búfer. Tu código eZ80 envía comandos y continúa ejecutándose. El VDP se pone al día independientemente. Esto significa que no tienes el acoplamiento estrecho del Spectrum entre el trabajo de CPU y la salida de pantalla -- pero tampoco puedes controlar precisamente cuándo aparecen los píxeles.
 4. **Tasa de fotogramas independiente.** El VDP renderiza a su propia tasa (típicamente 60 Hz). Tu bucle de juego eZ80 puede ejecutarse a cualquier tasa que quiera; el VDP mostrará lo que haya dibujado más recientemente.
 
-Para los programadores de Spectrum, esto es un cambio de paradigma. Pasas de "escribo bytes a la memoria de vídeo y aparecen en la siguiente línea de escaneo" a "envío comandos de dibujo y confío en que el VDP los renderice eventualmente." La ventaja es una sobrecarga de CPU enormemente reducida para gráficos. La desventaja es menos control.
+For Spectrum programmers, this is a different approach entirely. You go from "I write bytes to video memory and they appear on the next scanline" to "I send drawing commands and trust the VDP to render them eventually." The upside is enormously reduced CPU overhead for graphics. The downside is less control.
 
 ### Modelo de memoria del eZ80: Plano de 24 bits
 
@@ -406,7 +407,7 @@ El eZ80 tiene un bus de direcciones de 24 bits, dándole un espacio de direccion
 | `$080000`-`$0FFFFF` | 512 KB | RAM (espejo, en algunas placas) |
 | `$A00000`-`$FFFFFF` | varía | E/S, periféricos on-chip |
 
-Sin conmutación de bancos. Sin cambio de páginas. Sin memoria contendida. Tu código, tus datos, tus búferes, tus tablas de consulta -- todo vive en un espacio único, plano, linealmente direccionable. Después del acto de malabarismo de 8 páginas del Spectrum, esto es liberador.
+No banking. No page switching. No contended memory. Your code, your data, your buffers, your lookup tables -- everything lives in one flat, linearly addressable space. After the Spectrum's 8-page juggling act, the simplification is immediate.
 
 El eZ80 soporta dos modos de operación que determinan cómo usa este espacio de direcciones.
 
@@ -418,7 +419,7 @@ Esta es la distinción arquitectónica más importante en el Agon, y confunde a 
 
 **Modo ADL** (Address Data Long) es el modo nativo del eZ80: registros de 24 bits, direcciones de 24 bits, espacio de direcciones completo de 16 MB. HL, BC, DE, SP, e IX/IY son todos de 24 bits de ancho. `LD HL,$123456` carga un valor de 3 bytes. `PUSH HL` empuja 3 bytes a la pila (no 2). Cada puntero es de 3 bytes.
 
-```z80
+```z80 id:ch15_adl_mode_vs_z80_mode
 ; ADL mode: 24-bit addressing, full 512KB accessible
     ld   hl, $040000       ; point to a buffer 256KB into RAM
     ld   (hl), $FF         ; write directly -- no banking needed
@@ -446,7 +447,7 @@ MOS (el sistema operativo del Agon) arranca el eZ80 en modo ADL, y la mayoría d
 
 MOS (Machine Operating System) proporciona servicios del sistema en el Agon: E/S de archivos, entrada de teclado, acceso a temporizador y comunicación con el VDP. Las llamadas a MOS se hacen a través de `RST $08` con un número de función en el registro A:
 
-```z80
+```z80 id:ch15_mos_api_the_operating_system
 ; MOS API: open a file
     ld   hl, filename       ; pointer to null-terminated filename
     ld   c, $01             ; mode: read
@@ -476,7 +477,7 @@ La E/S de archivos en el Agon es trivialmente fácil comparada con el Spectrum. 
 
 Todos los gráficos pasan por comandos VDU enviados al ESP32 VDP. El eZ80 envía bytes a un flujo de salida VDU; el VDP los interpreta como instrucciones de dibujo:
 
-```z80
+```z80 id:ch15_vdp_commands_talking_to_the
 ; VDP: draw a filled rectangle at (10, 10)
     rst  $10 : db 25        ; PLOT command
     rst  $10 : db 85        ; mode: filled rectangle
@@ -496,22 +497,22 @@ El cuello de botella es el enlace serial, no la CPU. Una escena compleja con muc
 
 Pongamos las dos máquinas lado a lado, enfocándonos en lo que importa para el motor de juego que construiremos en los Capítulos 16-19.
 
-| Característica | ZX Spectrum 128K | Agon Light 2 |
+| Feature | ZX Spectrum 128K | Agon Light 2 |
 |---------|-----------------|---------------|
-| CPU | Z80A @ 3,5 MHz | eZ80 @ 18,432 MHz |
-| T-states por fotograma (50 Hz) | ~70.908 (128K) / 71.680 (Pentagon) | ~368.640 |
-| RAM | 128 KB (8 x 16 KB páginas) | 512 KB (plana) |
-| Espacio de direcciones | 64 KB (con bancos) | 16 MB (24 bits) |
-| Memoria de pantalla | Bus compartido, escritura directa | VDP separado, basado en comandos |
-| Colores | 15 (8 base x brillo, menos superposición) | Hasta 64 en modos estándar |
-| Resolución | 256x192 (color de atributo por 8x8) | Configurable, hasta 640x480 |
-| Sprites | Solo por software | Hasta 256 sprites por hardware |
-| Desplazamiento | Solo por software (desplazamiento/copia manual) | Offsets de desplazamiento por hardware |
-| Sonido | AY-3-8910 (3 canales) | Audio ESP32 (multi-canal, formas de onda) |
-| Almacenamiento | Cinta / DivMMC (esxDOS) | Tarjeta SD (FAT32) |
-| Doble búfer | Pantalla sombra (página 7) | Gestionado por VDP |
+| CPU | Z80A @ 3.5 MHz | eZ80 @ 18.432 MHz |
+| T-states per frame | ~70,908 (128K, 50 Hz) / 71,680 (Pentagon, 50 Hz) | ~307,200 (60 Hz) |
+| RAM | 128 KB (8 x 16 KB pages) | 512 KB (flat) |
+| Address space | 64 KB (banked) | 16 MB (24-bit) |
+| Screen memory | Shared bus, direct write | Separate VDP, command-based |
+| Colours | 15 (8 base x bright, minus overlap) | Up to 64 in standard modes |
+| Resolution | 256x192 (attribute colour per 8x8) | Configurable, up to 640x480 |
+| Sprites | Software only | Up to 256 hardware sprites |
+| Scrolling | Software only (manual shift/copy) | Hardware scroll offsets |
+| Sound | AY-3-8910 (3 channels) | ESP32 audio (multi-channel, waveforms) |
+| Storage | Tape / DivMMC (esxDOS) | SD card (FAT32) |
+| Double buffering | Shadow screen (page 7) | VDP-managed |
 
-La relación del presupuesto de fotograma es aproximadamente 5:1 a favor del Agon. Pero los gráficos del Agon pasan por un cuello de botella serial, así que la velocidad bruta de CPU no se traduce directamente en velocidad de renderizado. En el Spectrum, `PUSH HL` escribe dos bytes en la pantalla en 11 T-states. En el Agon, actualizar la posición de un sprite requiere 6+ bytes sobre un enlace de 384 Kbaud, tomando cientos de microsegundos independientemente de la velocidad de CPU.
+The frame budget ratio is approximately 4:1 in the Agon's favour. But the Agon's graphics go through a serial bottleneck, so raw CPU speed does not translate directly to rendering speed. On the Spectrum, `PUSH HL` writes two bytes to the screen in 11 T-states. On the Agon, updating a sprite position requires 6+ bytes over a 384 Kbaud link, taking hundreds of microseconds regardless of CPU speed.
 
 El Spectrum recompensa la optimización a nivel de byte. El Agon recompensa las decisiones arquitectónicas. Ambos recompensan el pensamiento cuidadoso sobre presupuestos de fotograma.
 
@@ -525,7 +526,7 @@ Construyamos un inspector de memoria simple para ambas plataformas. Esta utilida
 
 La versión para Spectrum escribe directamente en la memoria de pantalla. Mostramos 16 filas de 16 bytes (256 bytes por página) con la dirección de inicio mostrada a la izquierda.
 
-```z80
+```z80 id:ch15_spectrum_version
 ; Memory Inspector - ZX Spectrum 128K
 ; Displays 256 bytes of memory as hex, navigable with keys
 ; ORG $8000 (page 2, uncontended)
@@ -605,7 +606,7 @@ main_loop:
     ld   b, 16
 .byte_loop:
     ld   a, (hl)
-    call print_hex                ; 7T load + print routine
+    call print_hex                ; 17T call + print routine
     inc  hl
     ld   a, ' '
     call print_char
@@ -640,7 +641,7 @@ El punto arquitectónico clave: inspeccionamos `$C000` porque esa es la ranura c
 
 La versión para Agon usa llamadas al sistema MOS para entrada de teclado y salida de texto VDP. Sin cálculo de dirección de pantalla, sin manejo de atributos -- solo envía texto al VDP.
 
-```z80
+```z80 id:ch15_agon_version
 ; Memory Inspector - Agon Light 2 (ADL mode)
     .ASSUME ADL=1
     ORG  $040000
@@ -727,7 +728,7 @@ Esto refleja la experiencia de desarrollo más amplia en ambas plataformas. El S
 
 - El **enlace serial** entre eZ80 y ESP32 es el cuello de botella del Agon. Minimiza el tráfico de comandos VDP por fotograma. Usa sprites y tilemaps por hardware para reducir el número de comandos de dibujo.
 
-- Ambas plataformas recompensan la gestión cuidadosa del presupuesto de fotograma. El Spectrum te da ~70.000 T-states y demanda optimización a nivel de byte. El Agon te da ~368.000 T-states pero limita los gráficos a través de un enlace serial. Diferentes restricciones, misma disciplina.
+- Both platforms reward careful frame budget management. The Spectrum gives you ~70,000 T-states and demands byte-level optimisation. The Agon gives you ~307,000 T-states (at 60 Hz) but throttles graphics through a serial link. Different constraints, same discipline.
 
 ---
 

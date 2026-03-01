@@ -41,7 +41,7 @@ Esta es una decisión de diseño con beneficios técnicos en cascada. Los efecto
 
 En el centro de la arquitectura de Lo-Fi Motion está la **tabla de escenas** -- una estructura de datos que impulsa toda la demo. Cada entrada en la tabla describe una escena:
 
-```
+```z80 id:ch20_the_scene_table
 ; Scene table entry (conceptual structure)
 scene_entry:
     DB  bank_number          ; which 16K memory bank holds this effect's code
@@ -92,7 +92,7 @@ La lección práctica: no hay una única cadena de herramientas "correcta". La c
 
 Las herramientas se encadenan a través de un **Makefile** (o script de compilación equivalente). El pipeline para Lo-Fi Motion se ve aproximadamente así:
 
-```
+```text
 Source assets (PNG, raw data)
     |
     v
@@ -133,7 +133,7 @@ La observación crítica: el motor y el pipeline consumen los primeros dos días
 
 ## 20.3 La Cultura Making-of
 
-La demoscene del ZX Spectrum tiene una cultura notablemente fuerte de documentar cómo se hacen las demos. Esto no es universal en la demoscene más amplia -- en muchas plataformas, las demos se lanzan sin más documentación que los créditos. En la escena del Spectrum, los artículos making-of detallados son una tradición, y Hype (hype.retroscene.org) es el principal lugar para publicarlos.
+The ZX Spectrum demoscene has a strong culture of documenting how demos are made. This is not universal in the broader demoscene -- on many platforms, demos ship with no documentation beyond credits. On the Spectrum scene, detailed making-of articles are a tradition, and Hype (hype.retroscene.org) is the primary venue for publishing them.
 
 ### Eager: El NFO Técnico
 
@@ -165,7 +165,7 @@ Esto importa para el flujo de trabajo de demos a cualquier escala. Incluso en un
 
 La cadena de herramientas de demos del ZX Spectrum ha convergido en un conjunto estándar. Aquí hay un diseño típico de proyecto:
 
-```
+```text
 src/
     main.asm            ; entry point, scene table, engine loop
     engine.asm          ; scene table interpreter, buffer management
@@ -206,6 +206,67 @@ Tu Makefile debe automatizar el pipeline completo: activos fuente a scripts de c
 
 CI via GitHub Actions es cada vez más común. Un flujo de trabajo que compila en cada push captura dependencias implícitas -- la demo se ensambla en tu máquina pero falla en un entorno limpio por una versión de herramienta no declarada. El fuente de Lo-Fi Motion está en GitHub, publicado como implementación de referencia: clónalo, ejecuta `make`, obtén un binario funcional. Esta apertura es inusual en la demoscene y valiosa para aprender.
 
+### Synchronisation and Compositing
+
+The hardest part of a demo is not the effects --- it is the *timing*. When to start the plasma. When to cut to the scroller. Which beat triggers the colour flash. This is synchronisation, and the ZX Spectrum scene has evolved a layered approach that combines demoscene-specific tools with general-purpose video editing.
+
+**The sync table.** At the Z80 level, synchronisation is a data table:
+
+```z80
+sync_table:
+    dw 0,     effect_logo       ; frame 0: show logo
+    dw 150,   effect_plasma     ; frame 150: start plasma
+    dw 312,   flash_border      ; frame 312: beat hit, flash
+    dw 500,   effect_scroll     ; frame 500: start scroller
+    dw 0                        ; end marker
+```
+
+The engine increments a frame counter each VBlank, compares it against the next entry in the table, and dispatches when the frame arrives. This is the simplest possible sync mechanism. It is also what every ZX Spectrum demo ultimately runs --- regardless of how those frame numbers were determined.
+
+The question is: how do you *find* the right frame numbers? Five approaches exist, from the simplest to the most sophisticated. (Appendix J covers each tool's full workflow, export pipelines, and step-by-step recipes.)
+
+**Approach 1: Vortex Tracker + manual timing.** Open your .pt3 in Vortex Tracker II. The bottom-right corner shows the current position (pattern, row, frame). Play the tune, note the frame numbers where beats, accents, and phrase transitions occur. Write them into your sync table. Rebuild, test, adjust. This is the approach most ZX demosceners use, including Kolnogorov (Vein): "Vortex + video editor. In Vortex the frame is shown in the bottom-right corner --- I looked at which frames to hook onto, created a table with `dw frame, action` entries, and synced from that."
+
+The advantage: you hear the music and see the numbers simultaneously. The disadvantage: iterating is slow --- every change requires rebuilding the demo and watching it from the beginning.
+
+**Approach 2: Video editor as sync planner.** diver4d's GABBA workflow recognised that frame-level synchronisation is a video editing problem. Capture each effect as a video clip, import the clips and music into a video editor (DaVinci Resolve, Blender VSE), scrub to find the perfect cut points, and read off the frame numbers. Kolnogorov: "I exported effect clips to video, assembled them in a video editor, attached the music track, and looked at what order the effects work best in, noting the frames where events should happen." The important word is *looked* --- this is a visual, intuitive process. (Appendix J.2--J.3 covers Blender VSE, DaVinci Resolve, and the GABBA workflow in detail.)
+
+**Approach 3: GNU Rocket.** The standard sync tool across the PC and Amiga demoscenes --- a tracker-like editor where columns are named parameters and rows are time steps. You set keyframes with interpolation (step, linear, smooth, ramp) and edit live while the demo runs via TCP. A Z80 client is impractical, but the workflow transfers: design sync curves in Rocket, export keyframes, convert to Z80 `dw`/`db` tables with a Python script. (Appendix J.2 describes the full Rocket → Z80 pipeline; Appendix J.7 provides a step-by-step recipe.)
+
+**Approach 4: Blender for pre-visualisation.** For complex demos, storyboard effects as colour-coded strips on the VSE timeline with the music track, animate placeholder parameters in the Graph Editor, then export frame numbers and keyframe values via Blender's Python API directly as Z80-ready data. (Appendix J.2--J.3 covers both the VSE and Graph Editor workflows.)
+
+**Approach 5: Game engines as data generators.** Unity and Unreal are overkill as *demo engines* but perfect as *data generators*: VR motion capture (draw trajectories with a controller), GPU particle simulation (export positions per frame), and shader prototyping (iterate an algorithm at full speed, then translate to Z80). Blender covers most of this for non-VR work. The export pipeline is always the same: float → 8-bit fixed-point → delta-encode → transpose → compress → INCBIN. (Appendix J.4 covers the full pipeline with comparison tables and a step-by-step VR capture recipe.)
+
+> The PC demoscene has a parallel ecosystem of demo-making tools built on the same philosophy of procedural generation and extreme compression: Farbrausch's Werkkzeug/kkrunchy (open-sourced 2012), TiXL (node-based motion graphics, MIT), Bonzomatic (live shader coding), and music synths like Sointu and WaveSabre. None target Z80 directly, but the thinking is identical --- the ZX Spectrum equivalent of Werkkzeug's node graph is your Python build script that generates lookup tables and emits INCBIN directives. Appendix J.5 covers the history and Appendix J.6 surveys the music tools, including Furnace --- a modern tracker with direct AY-3-8910 support.
+
+<!-- figure: ch20_vortex_tracker_frame_counter -->
+
+```text
+┌─────────────────────────────────────────────────────────────────────┐
+│              FIGURE: Vortex Tracker II — frame counter              │
+│                                                                     │
+│  VT2 main window with pattern editor visible.                       │
+│  Bottom-right: position display showing pattern:row and             │
+│  absolute frame number.                                             │
+│  Highlight/circle the frame counter.                                │
+│                                                                     │
+│  Caption: "The frame number in VT2's status bar maps directly to    │
+│  the PT3 player's interrupt counter on the Spectrum. What you see   │
+│  here is what your sync table references."                          │
+│                                                                     │
+│  Screenshot needed: open any .pt3 in VTI fork, play to a           │
+│  mid-song position, capture with frame number visible.              │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+> *See Appendix J for pseudo-screenshots of GNU Rocket, Blender VSE, Blender Graph Editor, and TiXL, plus detailed tool descriptions and five step-by-step export recipes.*
+
+**The human touch.** Kolnogorov articulates a principle that all experienced demosceners understand but rarely state explicitly: "Even if we know the snare hits every 16 notes, and we flash the border every 16 notes --- it will look dead and robotic. The essence of sync is that it should be deliberately uneven and broken in places."
+
+Algorithmic sync --- trigger on every beat, fade on every phrase boundary --- feels mechanical. The best demo sync follows musical *phrases*, not individual beats. Some events fire slightly before the beat (building tension). Some fire after (surprise). Some phrases have no visual change at all (creating anticipation for the next hit). This is why manual sync tables, tediously assembled by a human watching and listening, consistently produce better results than any automated system.
+
+The practical consequence: even if you use Rocket or Blender to plan your sync, the final pass is always manual. Watch the demo with the music. Adjust frame numbers by ear. Add the off-beat hits and the deliberate silences that make the sync feel alive.
+
 ---
 
 ## 20.5 La Cultura Compo
@@ -216,7 +277,7 @@ Una demo sin compo es un video en YouTube. Una demo en una compo es una actuaci�
 
 La demoscene del ZX Spectrum es servida por un puñado de fiestas recurrentes, cada una con su propio carácter.
 
-**Chaos Constructions (CC)** es el evento de demos ZX más grande y prestigioso, celebrado en San Petersburgo, Rusia. La compo de demos ZX en CC atrae las entradas más fuertes: Break Space (2016), los sucesores de Eager, y producciones de grupos como Thesuper, 4D+TBK y Placeholders. CC es donde vas a competir al más alto nivel. La audiencia es grande, conocedora e implacable.
+**Chaos Constructions (CC)** is the largest and most prestigious ZX demo event, held in Saint Petersburg, Russia. The ZX demo compo at CC draws the strongest entries: Break Space (2016), Eager's successors, and productions from groups like Thesuper, 4D+TBK, and Placeholders. CC is where you go to compete at the highest level. The audience is large, knowledgeable, and unforgiving.
 
 **DiHalt** se celebra en Nizhny Novgorod, Rusia, y tiene tanto un evento de verano como una edición "Lite" de invierno. DiHalt tiende a ser más experimental que CC -- la audiencia es acogedora con participantes primerizos, y la atmósfera alienta la toma de riesgos. Lo-Fi Motion se lanzó en DiHalt 2020. Si estás entrando tu primera compo, DiHalt Lite es una buena elección.
 
@@ -328,6 +389,34 @@ Esto es lo que "MORE" demanda. No más polígonos, no más colores, no más efec
 
 Para el lector que ha seguido este libro desde el Capítulo 1 y quiere hacer una demo, aquí hay un camino concreto.
 
+<!-- figure: ch20_demo_workflow_pipeline -->
+
+```mermaid id:ch20_your_first_demo_a_practical
+graph TD
+    IDEA["Idea<br>(visual concept, mood, music)"] --> PROTO["Prototype<br>(verify/ HTML/JS, or<br>quick Z80 test)"]
+    PROTO --> IMPL["Z80 Implementation<br>(sjasmplus, effect code)"]
+    IMPL --> TIME{"Fits in<br>frame budget?"}
+    TIME -- No --> OPT["Optimise<br>(unroll, precompute,<br>reduce scope)"]
+    OPT --> IMPL
+    TIME -- Yes --> POLISH["Polish<br>(transitions, sync to music,<br>colour palette)"]
+    POLISH --> PARTY["Party Version<br>(submit to compo)"]
+    PARTY --> FINAL["Final Version<br>(fix bugs, add credits,<br>test on hardware)"]
+
+    IMPL -.-> |"border-colour timing"| TIME
+    POLISH -.-> |"scene table reorder"| POLISH
+
+    style IDEA fill:#ffd,stroke:#993
+    style PROTO fill:#ddf,stroke:#339
+    style IMPL fill:#dfd,stroke:#393
+    style OPT fill:#fdd,stroke:#933
+    style PARTY fill:#fdf,stroke:#939
+    style FINAL fill:#dff,stroke:#399
+```
+
+> **The iterative loop:** The path from implementation to timing check and back is where most development time is spent. The prototype stage (HTML/JS or quick Z80 sketch) validates the visual concept before committing to full implementation. The scene table makes reordering effects trivial during the polish phase.
+
+![Demo framework with effect slots driven by a scene table, showing the engine cycling through multiple visual effects](../../build/screenshots/ch20_demo_framework.png)
+
 ### Semana 1: Fundamentos
 
 1. **Configura la cadena de herramientas.** Instala sjasmplus, elige un emulador (Unreal Speccy, Fuse o ZEsarUX), configura un directorio de proyecto con un Makefile. Verifica que puedes ensamblar un programa mínimo y ejecutarlo en el emulador.
@@ -360,7 +449,7 @@ Para el lector que ha seguido este libro desde el Capítulo 1 y quiere hacer una
 
 12. **Envía.** Elige una fiesta. Sigue las reglas. Sube el archivo. Luego mira la compo y disfruta viendo tu trabajo en pantalla.
 
-No ganarás. Tus efectos serán más simples que las entradas de los grupos experimentados. Tu sincronización será imperfecta. Tus transiciones serán toscas. Nada de esto importa. Lo que importa es que terminaste una demo, la enviaste a una compo, y te uniste a una comunidad que ha estado haciendo esto durante treinta años. La próxima demo será mejor. Y la siguiente.
+Your first entry is unlikely to place. Treat it as a learning exercise: the feedback from seeing your work on the big screen and comparing it to other entries is more valuable than any prize. Each subsequent demo will be better because you will know what to fix.
 
 ---
 
@@ -375,6 +464,8 @@ No ganarás. Tus efectos serán más simples que las entradas de los grupos expe
 - **La cultura making-of es una fortaleza de la escena ZX.** Escritos técnicos detallados -- desde el NFO de Eager hasta el flujo de trabajo de editor de video de GABBA y el rompecabezas de 256 bytes de NHBF -- sirven como educación, documentación y construcción de comunidad.
 
 - **La cadena de herramientas estándar** converge en sjasmplus (ensamblador), Unreal Speccy o Fuse (emulador), BGE o Multipaint (gráficos), scripts Ruby o Python (conversión y generación de código), ZX0 o hrust1opt (compresión), y un Makefile (automatización de compilación). CI via GitHub Actions es cada vez más común.
+
+- **Synchronisation** is the hardest part of a demo. The layered approach: determine frame numbers in Vortex Tracker or a video editor (DaVinci Resolve, Blender VSE), optionally plan interpolated parameter curves in GNU Rocket, export to Z80 `dw frame, action` tables. The final pass is always manual --- algorithmic sync feels robotic; human-placed sync follows phrases, not beats. (Appendix J covers all sync tools, data generation pipelines, and step-by-step export recipes.)
 
 - **La cultura compo** se centra en eventos como Chaos Constructions, DiHalt, Multimatograf, CAFe y Revision. Entrar tu primera compo requiere elegir un evento apropiado, seguir las reglas, probar exhaustivamente y enviar temprano.
 

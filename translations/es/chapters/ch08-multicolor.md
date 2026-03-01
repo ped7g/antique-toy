@@ -17,6 +17,8 @@ El truco es obvio una vez que lo ves: si cambias el byte de atributo entre lectu
 
 Esto es mMulticolor. Se conoce al menos desde principios de la década de 2000, cuando la revista rusa de ZX Black Crow publicó un algoritmo y código de ejemplo en su quinto número. Pero durante años, multicolor siguió siendo una curiosidad --- impresionante en demos, impráctico en juegos, porque la CPU gastaba tantos T-states cambiando atributos que no quedaba nada para la lógica del juego.
 
+> **La carrera:** A 224 T-states por línea de escaneo, escribir 32 bytes mediante `LD (HL),A : INC L` cuesta 352T — más de una línea de escaneo. Esta es la razón por la que la resolución de 8x2 (cambiar cada 2 líneas de escaneo) es el límite práctico con reescritura de atributos por CPU, y por la que LDPUSH fusiona la salida de píxeles y atributos para evitar una pasada de atributos separada.
+
 Entonces DenisGrachev descubrió cómo hacer juegos con ello.
 
 ---
@@ -49,11 +51,11 @@ Así es como funciona.
 
 ### LD DE,nn / PUSH DE
 
-La instrucción `LD DE,nn` carga un valor inmediato de 16 bits en el par de registros DE. Toma 10 T-states y tiene 3 bytes de largo: el byte de opcode `$11`, seguido de dos bytes de datos (el valor a cargar, byte bajo primero). La instrucción `PUSH DE` escribe el contenido de DE en la dirección apuntada por SP, luego decrementa SP en 2. Toma 11 T-states.
+The instruction `LD DE,nn` loads a 16-bit immediate value into register pair DE. It takes 10 T-states and is 3 bytes long: the opcode byte `$11`, followed by two data bytes (the value to load, low byte first). The instruction `PUSH DE` decrements SP by 1, writes the high byte of DE, decrements SP by 1 again, then writes the low byte. The result: SP ends up 2 lower, with the high byte at the higher address and the low byte at the lower address. It takes 11 T-states.
 
 Juntas, `LD DE,nn : PUSH DE` cuestan 21 T-states, tienen 4 bytes de largo, y escriben 2 bytes de datos en la pantalla. Los "datos" son el operando inmediato de la instrucción LD. Para cambiar lo que se dibuja, no reescribes un búfer de pantalla --- parcheas los bytes de operando dentro de las propias instrucciones LD.
 
-```z80
+```z80 id:ch08_ld_de_nn_push_de
 ; One LDPUSH pair: writes 2 bytes to screen memory
     ld   de,$AA55       ; 10 T  load pixel data
     push de             ; 11 T  write to (SP), SP = SP - 2
@@ -123,6 +125,8 @@ El jugador no ve nada de esto. Ve un juego de desplazamiento lateral con más co
 
 Este es el punto que el trabajo de DenisGrachev demuestra contundentemente: multicolor no es un truco de demo. Es una técnica de motor de juegos. La ingeniería es extrema --- doble búfer, renderizado de dos fotogramas, sonido a 25 Hz --- pero el resultado es un juego jugable con visuales que genuinamente rompen los límites percibidos del Spectrum.
 
+![Multicolour effect — 8x2 attribute resolution gives each character cell up to eight colours instead of two](../../build/screenshots/ch08_multicolor.png)
+
 ---
 
 ## Ringo: Un Tipo Diferente de Multicolor
@@ -151,6 +155,8 @@ Combinado con el patrón de píxeles `11110000b`, esto da:
 
 Sobre la pantalla completa: 64 columnas x 48 filas = **3.072 píxeles coloreados independientemente**, cada uno de 4x4 píxeles reales de tamaño. La resolución efectiva es 64x48 con color completo por píxel de la paleta de 15 colores del Spectrum.
 
+![Dual-screen multicolour on the 128K Spectrum — Ringo's two-screen switching produces a 64x48 grid with independent per-pixel colour](../../build/screenshots/ch08_multicolor_dualscreen.png)
+
 Este es un enfoque fundamentalmente diferente del multicolor 8x2 de GLUF. GLUF cambia atributos en sincronía con el haz, requiriendo temporización precisa y consumiendo presupuestos masivos de ciclos. Ringo usa cambio de pantalla dual por hardware, que requiere solo una sola instrucción `OUT` cada 4 líneas de escaneo. La sobrecarga de CPU para el cambio de pantalla en sí es mínima.
 
 ### Dónde van los T-states
@@ -161,7 +167,7 @@ Los sprites de Ringo son de 12x10 "píxeles" en la cuadrícula de 64x48, lo que 
 
 El renderizado de tiles es más complejo. DenisGrachev pre-genera código de renderizado de tiles en páginas de memoria, usando patrones `pop af : or (hl)`:
 
-```z80
+```z80 id:ch08_where_the_t_states_go
 ; Tile rendering fragment (conceptual)
     pop  af             ; 10 T  load tile data from stack-based source
     or   (hl)           ;  7 T  combine with existing screen data
@@ -199,6 +205,40 @@ La técnica funciona así:
 
 La temporización es brutal. Cada línea de escaneo toma 224 T-states en Pentagon. La ULA lee 32 bytes de atributos al inicio de cada línea de escaneo, y la CPU debe cambiar los 32 bytes en el hueco antes de la siguiente lectura. Con `LD (HL),A : INC L` a 11 T-states por byte, escribir 32 bytes toma 352 T-states --- más de una línea de escaneo completa. No puedes cambiar cada línea de escaneo. En el mejor caso, puedes cambiar cada dos líneas de escaneo (resolución 8x2) si usas el método de salida más rápido posible (basado en PUSH), e incluso entonces los márgenes de temporización son razor-thin.
 
+<!-- figure: ch08_multicolor_beam_racing -->
+
+```mermaid id:ch08_traditional_multicolor_the
+sequenceDiagram
+    participant CPU
+    participant ULA as ULA (electron beam)
+    participant ATTR as Attribute RAM ($5800)
+
+    Note over ULA: Scanline N begins (224T)
+    ULA->>ATTR: Read 32 attribute bytes for row
+    Note over ULA: Display scanline N using attrs
+
+    rect rgb(200, 230, 255)
+        Note over CPU: ← Window: CPU rewrites attributes
+        CPU->>ATTR: Write 32 new attribute bytes
+        Note over CPU: (must complete before next read!)
+    end
+
+    Note over ULA: Scanline N+2 begins
+    ULA->>ATTR: Read 32 attribute bytes (sees NEW values)
+    Note over ULA: Display scanline N+2 with new colours
+
+    rect rgb(200, 230, 255)
+        Note over CPU: ← Window: CPU rewrites again
+        CPU->>ATTR: Write 32 more attribute bytes
+    end
+
+    Note over ULA: Scanline N+4 begins
+    ULA->>ATTR: Read attrs (sees NEWEST values)
+    Note over ULA: Display with third colour band
+```
+
+> **The race:** At 224 T-states per scanline, writing 32 bytes via `LD (HL),A : INC L` costs 352T — more than one scanline. This is why 8×2 resolution (change every 2 scanlines) is the practical limit with CPU-based attribute rewriting, and why LDPUSH merges pixel and attribute output to avoid a separate attribute pass.
+
 El resultado práctico: el multicolor tradicional consume el 80--90% de la CPU en gestión de atributos. En una demo, donde el multicolor *es* el efecto, esto es aceptable. En un juego, es letal. No quedan T-states para lógica de juego, detección de colisiones o sonido.
 
 La técnica LDPUSH de DenisGrachev resuelve esto fusionando la salida de atributos con la salida de píxeles. El mismo código que escribe datos de píxeles también escribe atributos, y ambos están incrustados en instrucciones ejecutables. No hay una fase separada de "gestión de atributos" consumiendo el presupuesto. El paso de renderizado maneja todo.
@@ -235,7 +275,7 @@ Construyamos un renderizador multicolor simplificado. El objetivo: un área de j
 
 Primero, necesitamos un bloque de memoria lleno de pares de instrucciones LDPUSH. Para cada línea de escaneo en el área de juego de 24 caracteres, necesitamos 12 pares de `LD DE,nn : PUSH DE` (cada par emite 2 bytes, 12 pares emiten 24 bytes = el ancho completo del área de juego).
 
-```z80
+```z80 id:ch08_step_1_the_display_code
 ; Structure of one scanline's display code (conceptual)
 ; SP is pre-set to the right edge of this scanline in screen memory
 
@@ -260,7 +300,7 @@ El código de pantalla total para 128 líneas de escaneo (16 filas de caracteres
 
 Cada dos líneas de escaneo, el código de pantalla debe incluir escrituras de atributos. Entre las secuencias LDPUSH para las líneas de escaneo N y N+2, insertar código que sobrescriba los 32 bytes de atributos para la fila de caracteres actual:
 
-```z80
+```z80 id:ch08_step_2_attribute_changes
 ; After outputting scanline N...
 ; Attribute change for the next 2-scanline band
 
@@ -281,7 +321,7 @@ Los cambios de atributos están incrustados directamente en el flujo de código 
 
 Para dibujar un tile en el área de juego, debes parchar los bytes de operando de las instrucciones LD en el búfer de código de pantalla. Un tile de 16x16 píxeles cubre 2 bytes de ancho y 16 líneas de escaneo de alto. En el código de pantalla, esos 2 bytes son el operando de una instrucción LD DE específica. Para actualizar el tile:
 
-```z80
+```z80 id:ch08_step_3_tile_rendering_via
 ; Patch one scanline of a 16x16 tile into the display buffer
 ; IX points to the LD DE instruction for this position in the buffer
 ; HL points to the tile's pixel data for this scanline
@@ -304,7 +344,7 @@ Por eso GLUF divide el renderizado en dos fotogramas. El Fotograma 1 maneja los 
 
 Los sprites se renderizan sobre los tiles usando la misma técnica de parcheo de operandos, pero con un paso adicional: guardar los bytes de operando originales antes de sobrescribirlos, para que el sprite pueda borrarse en el siguiente fotograma restaurando los datos guardados.
 
-```z80
+```z80 id:ch08_step_4_sprite_overlay
 ; Sprite rendering: save background, patch sprite data
     ld   a,(ix+1)           ; read current (background) byte
     ld   (save_buffer),a    ; save for later restoration
@@ -316,7 +356,7 @@ El mecanismo de guardar/restaurar es el equivalente multicolor del renderizado d
 
 ### Paso 5: El bucle principal
 
-```z80
+```z80 id:ch08_step_5_the_main_loop
 main_loop:
     halt                    ; synchronise with frame
 
@@ -356,17 +396,7 @@ Este esqueleto captura el ritmo esencial: dos fotogramas por fotograma lógico d
 
 ## Lo Que Significa el Trabajo de DenisGrachev
 
-La demoscene siempre ha sido sobre llevar el hardware más allá de sus límites. Pero hay una distinción --- a veces pasada por alto, a veces intencional --- entre llevar el hardware al límite para una demo de diez segundos y llevarlo al límite para un juego jugable.
-
-Las demos son arte de performance. Se ejecutan una vez, impresionan, terminan. No hay manejo de entrada. No hay detección de colisiones. No hay estado que persista de un fotograma al siguiente (más allá de lo que el efecto necesita internamente). Una demo puede gastar el 100% de sus T-states en espectáculo visual porque el espectáculo es todo lo que necesita producir.
-
-Los juegos son ingeniería. Deben leer el teclado, actualizar posiciones de entidades, verificar colisiones, reproducir sonido, gestionar el estado del juego y renderizar la pantalla --- cada fotograma, para siempre, mientras permanecen receptivos al jugador. Cada uno de estos sistemas compite por el mismo presupuesto de 70.000 ciclos. Una técnica que funciona en una demo pero consume el 90% de la CPU es inútil para juegos.
-
-El logro de DenisGrachev es resolver el problema de ingeniería. Multicolor era conocido. El potencial visual era conocido. El patrón de instrucciones LDPUSH era posiblemente implícito en la larga historia de trucos de salida basados en pila de la demoscene (Capítulo 3). Lo que no se conocía era cómo hacer caber el renderizado multicolor, motores de tiles, superposición de sprites, doble búfer, sonido, entrada y lógica de juego en el mismo presupuesto de fotograma. La arquitectura de dos fotogramas, el búfer de pantalla fusionado código-como-datos, el compromiso de sonido a 25 Hz, la cuidadosa asignación de presupuesto --- estas son decisiones de motor de juego, no trucos de demo.
-
-El motor Ringo avanza más en una dirección diferente. Al usar cambio de pantalla dual en lugar de cambios de atributos sincronizados con el haz, intercambia resolución de color (64x48 en lugar de la cuadrícula de 192x128 píxeles de GLUF) por una ruta de renderizado radicalmente más barata. La sobrecarga de CPU del cambio de pantalla es un puñado de instrucciones `OUT` por fotograma. Lo que ganas es presupuesto de ciclos. En lo que lo gastas es lógica de juego.
-
-Ambos motores representan una filosofía: las técnicas de la demoscene no son exhibiciones de museo. Son herramientas de ingeniería, aplicables a productos reales, si estás dispuesto a hacer el trabajo de hacerlas prácticas. Los juegos multicolor de DenisGrachev no parecen juegos de ZX Spectrum. Parecen juegos que resulta que corren en un ZX Spectrum. Esa distinción es todo el punto.
+DenisGrachev's achievement was not inventing multicolor --- the technique was known. It was solving the engineering problem of fitting multicolor rendering, tile engines, sprite overlay, double buffering, sound, and game logic into the same frame budget. The two-frame architecture, the merged code-as-data display buffer, and the 25 Hz sound compromise are game engine decisions, not demo tricks. Ringo pushed further by trading colour resolution (64x48 vs GLUF's 192x128 pixel grid) for a cheaper rendering path via dual-screen switching.
 
 ---
 

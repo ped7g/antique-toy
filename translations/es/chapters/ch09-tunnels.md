@@ -37,7 +37,31 @@ En el Z80, esto significa consultas de tabla. Una tabla de senos de 256 bytes, a
 
 La forma del túnel es implícita, no explícita. No hay cálculo de distancia al centro, no hay tabla de ángulos, no hay transformación a coordenadas polares. En su lugar, los parámetros de frecuencia y fase del plasma están organizados de modo que el patrón de color resultante naturalmente forma anillos concéntricos cuando se ve en pantalla. Los anillos emergen de la interferencia de las ondas sinusoidales, igual que los patrones Moiré emergen de cuadrículas superpuestas. Ajusta los parámetros y los anillos se contraen hacia el centro, creando la ilusión de profundidad -- de mirar dentro de un túnel.
 
+<!-- figure: ch09_tunnel_plasma_computation -->
+
+```mermaid id:ch09_plasma_the_colour_engine
+graph TD
+    A["For each attribute cell (row, col)"] --> B["Look up sin(col × freq1 + phase1)<br>from 256-byte sine table"]
+    B --> C["Look up sin(row × freq2 + phase2)"]
+    C --> D["Look up sin(col+row + phase3)"]
+    D --> E["Sum the three sine values"]
+    E --> F["Index into colour map<br>(sum → attribute byte)"]
+    F --> G["Write attribute to buffer"]
+    G --> H{More cells<br>in quadrant?}
+    H -- Yes --> A
+    H -- No --> I["4-fold symmetry copy:<br>top-left → top-right,<br>bottom-left, bottom-right"]
+    I --> J["Increment phase1, phase2, phase3<br>→ next frame"]
+    J --> A
+
+    style F fill:#f9f,stroke:#333
+    style I fill:#bfb,stroke:#333
+```
+
+> **Key insight:** There is no distance-from-centre calculation, no angle table, no polar coordinate transform. The tunnel shape emerges from sine wave interference — concentric rings appear naturally from overlapping frequencies. Only one quarter (16×12) is computed; the rest is mirrored.
+
 Esto es más barato que un túnel geométrico verdadero (que requeriría consultas de distancia y ángulo por píxel) y produce un resultado visualmente rico. La compensación es menos precisión geométrica, pero a resolución 32x24, la precisión geométrica nunca estuvo sobre la mesa de todos modos.
+
+![Plasma algorithm — true-colour sine sum reference (left) vs ZX Spectrum 15-colour attribute output (right), showing how four-fold symmetry halves computation](../../build/screenshots/proto_ch09_plasma.png)
 
 ---
 
@@ -47,9 +71,9 @@ Incluso a 32x24, calcular plasma para las 768 celdas cada fotograma es costoso e
 
 Un túnel visto de frente es simétrico respecto a los ejes horizontal y vertical. Si calculas un cuarto de la pantalla -- el bloque superior izquierdo de 16x12 -- puedes copiarlo a los otros tres cuartos mediante espejo. Superior izquierdo a superior derecho es un reflejo horizontal. Superior izquierdo a inferior izquierdo es un reflejo vertical. Superior izquierdo a inferior derecho son ambos.
 
-La rutina de copia es notablemente ajustada. En la implementación de Introspec, HL apunta al byte fuente en el cuarto superior izquierdo, y las tres direcciones de destino (superior derecho, inferior izquierdo, inferior derecho) se mantienen en una combinación de direcciones absolutas y el par de registros BC:
+The copy routine is tight. In Introspec's implementation, HL points to the source byte in the top-left quarter, and the three destination addresses (top-right, bottom-left, bottom-right) are maintained in a combination of absolute addresses and register pair BC:
 
-```z80
+```z80 id:ch09_four_fold_symmetry_divide_and
     ld a,(hl)      ; read source byte from top-left quarter
     ld (nn),a      ; write to upper-right quarter (mirrored)
     ld (mm),a      ; write to lower-left quarter (mirrored)
@@ -73,7 +97,7 @@ El "caos" viene del resultado visual, no del algoritmo. El efecto hace zoom en u
 
 La implementación se basa en secuencias desenrolladas de `ld hl,nn : ldi`. Cada `ld hl,nn` carga una nueva dirección fuente -- la posición en el búfer fuente a muestrear para esta celda de salida particular. El siguiente `ldi` copia de (HL) a (DE), avanzando DE a la siguiente posición de salida. Las direcciones fuente están organizadas de modo que las celdas cerca del centro de la pantalla muestrean posiciones cercanas en los datos fuente (magnificación), mientras que las celdas cerca de los bordes muestrean posiciones muy espaciadas (compresión). Varía el mapeo a lo largo del tiempo y el zoom se anima.
 
-```z80
+```z80 id:ch09_the_chaos_zoomer
     ; Unrolled chaos zoomer fragment
     ld hl,src_addr_0    ; source for output cell 0
     ldi                 ; copy to output, advance DE
@@ -84,7 +108,7 @@ La implementación se basa en secuencias desenrolladas de `ld hl,nn : ldi`. Cada
     ; ... repeated for all 768 cells (or one quarter, with symmetry)
 ```
 
-La optimización clave: dado que `ldi` auto-incrementa DE, nunca necesitas calcular o cargar la dirección de destino. La salida siempre se escribe secuencialmente en la RAM de atributos. Solo las direcciones fuente varían, y están incrustadas directamente en el flujo de instrucciones como operandos inmediatos. Esto hace del zoomer una larga secuencia de pares `ld hl,nn : ldi` -- conceptualmente simple, pero cada par son solo 6 bytes y 26 T-states. Para un cuarto de pantalla completo de 192 celdas, eso son aproximadamente 5.000 T-states de copia pura, más la copia de simetría de cuatro vías encima.
+The key optimisation: since `ldi` auto-increments DE, you never need to calculate or load the destination address. The output is always written sequentially into attribute RAM. Only the source addresses vary, and they are embedded directly in the instruction stream as immediate operands. This makes the zoomer a long sequence of `ld hl,nn : ldi` pairs -- conceptually simple, but each pair is just 5 bytes (3 for `ld hl,nn` + 2 for `ldi`) and 26 T-states. For a full quarter-screen of 192 cells, that is roughly 5,000 T-states of pure copying, plus the four-way symmetry copy on top.
 
 La complicación es que las direcciones fuente cambian cada fotograma a medida que el zoom progresa. Actualizar 192 direcciones de dos bytes incrustadas en el código costaría casi tanto como la copia misma. Aquí es donde entra la generación de código.
 
@@ -132,7 +156,7 @@ Eager fue desarrollado entre junio y agosto de 2015. Introspec ha dicho que la i
 
 La música vino de n1k-o (de Skrju), cuyo track le dio a la demo su estructura rítmica. La técnica híbrida de tambor -- muestra digital para el ataque transitorio, envolvente AY para la caída -- fue la innovación de n1k-o, e impulsó toda la decisión arquitectónica de construir un motor de generación asíncrona de fotogramas. Sin los tambores, Eager podría haber sido una demo más simple. Con ellos, se convirtió en lo que Introspec llamó "lo más difícil que he hecho en una demo."
 
-El desarrollo se comprimió en aproximadamente diez semanas. La versión de party, enviada a 3BM Open Air 2015, todavía tenía errores -- el file_id.diz llevaba una nota agradeciendo a diver de 4D+TBK "por el consejo genial" y disculpándose por la inestabilidad. La versión final corrigió los problemas de temporización entre modelos de Spectrum (128K, +2, +2A/B, +3, Pentagon -- todos solo a 3,5MHz, sin turbo). Esa polinización cruzada -- un scener de un grupo pasando un dato técnico a un programador de otro -- es cómo evoluciona la demoscene del ZX.
+The development was compressed into roughly ten weeks. The party version, submitted to 3BM Open Air 2015, still had bugs -- the file_id.diz carried a note thanking diver of 4D+TBK "for the cool tip" and apologising for the instability. The final version fixed the timing issues across Spectrum models (128K, +2, +2A/B, +3, Pentagon -- all at 3.5MHz only, no turbo). That cross-pollination -- a scener from one group passing a technical insight to a coder from another -- is how the ZX demoscene evolves.
 
 ---
 
@@ -151,7 +175,7 @@ Esto no igualará la sofisticación visual de Eager -- estamos omitiendo los pí
 
 Necesitamos un patrón de píxeles fijo para que los colores de tinta y papel sean ambos visibles. Un tablero de ajedrez simple funciona:
 
-```z80
+```z80 id:ch09_step_1_fill_pixel_memory_with
 ; Fill bitmap memory ($4000-$57FF) with checkerboard pattern
     ld hl,$4000
     ld de,$4001
@@ -167,7 +191,7 @@ Cada celda de 8x8 ahora mostrará píxeles alternos de tinta y papel. Cuando cam
 
 Alinear a página una tabla de senos de 256 bytes para indexación rápida. Puede generarse en tiempo de ensamblado usando el scripting Lua de sjasmplus, o precalcularse e incluirse como datos binarios:
 
-```z80
+```lua id:ch09_step_2_sine_table
     ALIGN 256
 sin_table:
     LUA ALLPASS
@@ -182,7 +206,7 @@ sin_table:
 
 Calcular el valor de plasma para cada celda en el cuarto superior izquierdo de 16x12. El resultado es un índice en una tabla de colores que produce el byte de atributo:
 
-```z80
+```z80 id:ch09_step_3_plasma_for_one_quarter
 ; Calculate plasma for top-left quarter (16 columns x 12 rows)
 ; Input: frame_phase is incremented each frame
 ; Output: attr_buffer filled with 192 attribute bytes
@@ -245,7 +269,7 @@ El enfoque simplificado copia fila por fila, reflejando horizontalmente para la 
 
 ### Paso 5: Bucle Principal
 
-```z80
+```z80 id:ch09_step_5_main_loop
 main_loop:
     halt                     ; wait for vsync
 
@@ -265,6 +289,8 @@ main_loop:
 ```
 
 Los diferentes incrementos de fase hacen que los términos del plasma roten a diferentes velocidades. Experimenta con estos valores -- incluso pequeños cambios producen texturas visuales dramáticamente diferentes.
+
+![Attribute-based plasma effect — sine wave interference produces rippling colour patterns across the 32x24 attribute grid](../../build/screenshots/ch09_plasma.png)
 
 ### Idea Clave
 

@@ -44,34 +44,34 @@ Todos los números provienen del benchmark de Introspec de 2017 ("Data Compressi
 Sigue de arriba abajo. Toma la primera rama que coincida con tu situación.
 
 ```
-INICIO
+START
   |
-  +-- Es una intro de 256 o 512 bytes?
-  |     SÍ --> ZX0 (descompresor de 70 bytes) o RLE personalizado (<30 bytes)
+  +-- Is this a 256-byte or 512-byte intro?
+  |     YES --> ZX0 (70-byte decompressor) or custom RLE (<30 bytes)
   |
-  +-- Es una intro de 1K o 4K?
-  |     SÍ --> ZX0 (mejor relación tasa/tamaño de descompresor)
+  +-- Is this a 1K or 4K intro?
+  |     YES --> ZX0 (best ratio-to-decompressor-size)
   |
-  +-- Necesitas streaming en tiempo real (descomprimir durante la reproducción)?
-  |     SÍ --> LZ4 (~34 T/byte = 2+ KB por fotograma a 50fps)
+  +-- Do you need real-time streaming (decompress during playback)?
+  |     YES --> LZ4 (~34 T/byte = 2+ KB per frame at 50fps)
   |
-  +-- Necesitas descompresión rápida entre escenas?
-  |     SÍ --> MegaLZ fast (~63 T/byte) o Pletter 5 (~69 T/byte)
+  +-- Do you need fast decompression between scenes?
+  |     YES --> MegaLZ fast (~63 T/byte) or Pletter 5 (~69 T/byte)
   |
-  +-- La velocidad de descompresión es irrelevante (carga única al inicio)?
-  |     SÍ --> Exomizer (tasa del 48.3%, nada lo supera)
+  +-- Is decompression speed irrelevant (one-time load at startup)?
+  |     YES --> Exomizer (48.3% ratio, nothing beats it)
   |
-  +-- Necesitas un buen equilibrio entre tasa y velocidad?
-  |     SÍ --> ApLib (~105 T/byte, tasa del 49.2%)
+  +-- Need a good balance of ratio and speed?
+  |     YES --> ApLib (~105 T/byte, 49.2% ratio)
   |
-  +-- Los datos son mayormente series de bytes idénticos?
-  |     SÍ --> RLE personalizado (descompresor < 30 bytes, trivial)
+  +-- Is the data mostly runs of identical bytes?
+  |     YES --> Custom RLE (decompressor < 30 bytes, trivial)
   |
-  +-- Los datos son fotogramas de animación secuenciales?
-  |     SÍ --> Codifica en delta primero, luego comprime con ZX0 o LZ4
+  +-- Is the data sequential animation frames?
+  |     YES --> Delta-encode first, then compress with ZX0 or LZ4
   |
-  +-- Primer proyecto, quieres algo simple?
-        SÍ --> Bitbuster o ZX0 (ambos bien documentados, fáciles de integrar)
+  +-- First project, want something simple?
+        YES --> Bitbuster or ZX0 (both well-documented, easy to integrate)
 ```
 
 ---
@@ -111,7 +111,7 @@ Estas técnicas mejoran la tasa de compresión reestructurando los datos antes d
 
 ## Descompresor RLE mínimo
 
-El compresor útil más simple. Menos de 30 bytes. Adecuado para intros de 256 bytes o datos con largas series de bytes idénticos. Consulta el Capítulo 14 para una discusión completa.
+The simplest useful compressor. Only 12 bytes of code. Suitable for 256-byte intros or data with long runs of identical bytes. See Chapter 14 for a full discussion.
 
 ```z80
 ; Minimal RLE decompressor
@@ -131,8 +131,9 @@ rle_decompress:
         inc     de              ;                         6T
         djnz    .fill           ; loop B times            13T/8T
         jr      rle_decompress  ; next pair               12T
-; Total: 23 bytes of code
-; Speed: ~26 T-states per output byte (within runs)
+; Total: 12 bytes of code
+; Speed: ~26 T-states per output byte (within long runs)
+;        + 46T overhead per [count, value] pair
 ```
 
 **Herramienta de codificación** (una línea en Python para RLE simple):
@@ -153,6 +154,8 @@ def rle_encode(data):
 ```
 
 Este RLE ingenuo expande datos sin series (peor caso: 2 bytes por 1 byte de entrada). Para datos mixtos, usa RLE con byte de escape: un byte especial señala una serie, y todos los demás bytes son literales. O simplemente usa ZX0.
+
+**Transposition trick.** RLE benefits dramatically from column-major data layout. If you have a 32×24 attribute block where each row varies but columns are often constant, transposing the data (storing all column 0 values, then column 1, etc.) creates long runs that RLE compresses well. The trade-off: the Z80 must un-transpose the data after decompression, which costs an extra pass (~13 T-states per byte for a simple nested-loop copy). Count the total cost (decompressor code + un-transpose code + compressed data) against ZX0 (decompressor + compressed data, no transform needed) to see which wins for your specific data.
 
 ---
 
@@ -329,7 +332,7 @@ Para demos grandes con muchos recursos comprimidos, mantén una tabla de tuplas 
 El paso de compresión pertenece a tu Makefile, no a tu cabeza.
 
 ```
-Recurso fuente     Convertidor      Compresor         Ensamblador
+Source asset       Converter        Compressor        Assembler
   (PNG)       -->   (png2scr)   -->   (zx0)      -->  (sjasmplus)  --> .tap
   (WAV)       -->   (pt3tools)  -->   (zx0)      -->  (incbin)
   (TMX)       -->   (tmx2bin)   -->   (exomizer)
@@ -367,7 +370,7 @@ demo.bin: main.asm assets/title.zx0 assets/font.zx0
 **Bytes por fotograma a 50fps con el descompresor X:**
 
 ```
-bytes_por_fotograma = 69,888 / velocidad_t_por_byte
+bytes_per_frame = 69,888 / speed_t_per_byte
 ```
 
 | Compresor | T/byte | Bytes/fotograma (48K) | Bytes/fotograma (128K Pentagon) |
@@ -385,7 +388,7 @@ bytes_por_fotograma = 69,888 / velocidad_t_por_byte
 **Memoria ahorrada por compresión en N pantallas:**
 
 ```
-ahorrado = N * 6912 * (1 - tasa)
+saved = N * 6912 * (1 - ratio)
 ```
 
 Ejemplo: 8 pantallas de carga con Exomizer al 48.3% de tasa ahorran 8 * 6912 * 0.517 = 28,575 bytes --- casi dos bancos completos de 16KB.

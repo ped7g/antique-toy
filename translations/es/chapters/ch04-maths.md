@@ -19,7 +19,7 @@ El enfoque clasico. Recorre los bits del multiplicador del LSB al MSB. Por cada 
 
 Aqui esta la multiplicacion sin signo 8x8 de Dark. Entrada: B por C. Resultado en A (byte alto) y C (byte bajo):
 
-```z80
+```z80 id:ch04_method_1_shift_and_add_from
 ; MULU112 -- 8x8 unsigned multiply
 ; Input:  B = multiplicand, C = multiplier
 ; Output: A:C = B * C (16-bit result, A=high, C=low)
@@ -48,15 +48,18 @@ Estudia esto con cuidado. La instruccion `RRA` desplaza A a la derecha, pero tam
 
 El coste es de 196 a 204 T-states dependiendo de cuantos bits del multiplicador estan activos -- cada bit activo cuesta un `ADD A,B` adicional (4 T-states). El ejemplo en `chapters/ch04-maths/examples/multiply8.a80` muestra una variante que devuelve el resultado en HL.
 
+<!-- Screenshot removed: result is border colour only, not capturable as static image -->
+
 Para 16x16 produciendo un resultado de 32 bits, el MULU224 de Dark funciona en 730 a 826 T-states. En la practica, los motores 3D de demoscene evitan multiplicaciones completas 16x16 manteniendo las coordenadas en punto fijo 8.8 y usando multiplicaciones 8x8 donde sea posible.
 
-![Recorrido de multiplicacion 8x8 por desplazamiento y suma](illustrations/output/ch04_multiply_walkthrough.png)
+<!-- figure: ch04_multiply_walkthrough -->
+![Shift-and-add 8x8 multiply walkthrough](illustrations/output/ch04_multiply_walkthrough.png)
 
 ### Metodo 2: Consulta en Tabla de Cuadrados
 
 El segundo metodo de Dark intercambia memoria por velocidad, explotando una identidad algebraica que todo demoscener eventualmente descubre:
 
-```
+```text
 A * B = ((A+B)^2 - (A-B)^2) / 4
 ```
 
@@ -64,7 +67,7 @@ Pre-computa una tabla de valores n^2/4, y la multiplicacion se convierte en dos 
 
 Necesitas una tabla de 512 bytes de (n^2/4) para n = 0 a 511, alineada a pagina para indexacion con un solo registro. La tabla debe ser de 512 bytes porque (A+B) puede alcanzar 510.
 
-```z80
+```z80 id:ch04_method_2_square_table_lookup_2
 ; MULU_FAST -- Square table multiply
 ; Input:  B, C = unsigned 8-bit factors
 ; Output: HL = B * C (16-bit result)
@@ -109,6 +112,121 @@ Para mapeado de texturas, plasma, scrollers -- usa la multiplicacion rapida. Par
 
 ---
 
+### `mul_signed_c` --- Envoltorio para eliminación de caras traseras
+
+La eliminación de caras traseras del Capítulo 5 pasa el primer operando en A en lugar de B. Un envoltorio delgado evita reestructurar el llamador:
+
+### Comparación de costes
+
+| Rutina | Entrada | Resultado | T-states | Notas |
+|---------|-------|--------|----------|-------|
+| `mulu112` (sin signo) | B, C | A:C (16-bit) | 196--204 | Desplazamiento y suma del Capítulo 4 |
+| `mulu_fast` (tabla de cuadrados) | B, C | HL (16-bit) | ~61 | Necesita tabla de 512 bytes; error de redondeo |
+| `mul_signed` | B, C (con signo) | HL (16-bit con signo) | ~240--260 | Manejo de signo añade ~40--60T |
+| `mul_signed_c` | A, C (con signo) | HL (16-bit con signo) | ~250--270 | Envoltorio para eliminación de caras traseras |
+
+### Complemento a dos en la práctica
+
+### Extensión de signo: el idioma `rla / sbc a,a`
+
+La multiplicación con signo es aproximadamente un 25% más costosa que la sin signo. Para un cubo de alambre con 8 vértices y 6 multiplicaciones por rotación de eje (12 en total por rotación 3D completa), el coste por vértice es ~3.120 T-states --- todavía cómodamente dentro del presupuesto de fotograma.
+
+```z80
+; Sign extension: A → D (0 if positive, $FF if negative)
+; Cost: 8T, 2 bytes. Branchless.
+    rla                 ; 4T  rotate sign bit into carry
+    sbc  a, a           ; 4T  A = 0 if carry clear, $FF if set
+```
+
+Las matrices de rotación del Capítulo 5 llaman a `mul_signed` seis veces por vértice para rotación en Z y perspectiva, y `mul_signed_c` dos veces por cara para eliminación de caras traseras. Ahora sabes exactamente qué hacen esas llamadas.
+
+> **Crédito:** El vacío de aritmética con signo fue identificado por Ped7g (Peter Helcmanovsky) durante su revisión del libro.
+
+### `mul_signed` --- Multiplicación con signo 8×8
+
+```z80 id:ch04_mul_signed
+; mul_signed — 8x8 signed multiply
+; Input:  B = signed multiplicand, C = signed multiplier
+; Output: HL = signed 16-bit result
+; Cost:   ~240-260 T-states (Pentagon)
+;
+; Algorithm: determine sign, abs both, unsigned multiply, negate if needed.
+
+mul_signed:
+    ld   a, b
+    xor  c               ; 4T  bit 7 = result sign (1 = negative)
+    push af              ; 11T save sign flag
+
+    ; Absolute value of B
+    ld   a, b
+    or   a
+    jp   p, .b_pos       ; 10T skip if positive
+    neg                  ; 8T  A = |B|
+.b_pos:
+    ld   b, a
+
+    ; Absolute value of C
+    ld   a, c
+    or   a
+    jp   p, .c_pos
+    neg
+.c_pos:
+    ld   c, a
+
+    ; Unsigned 8x8 multiply: B * C -> A:C (high:low)
+    ld   a, 0
+    ld   d, 8
+.mul_loop:
+    rr   c
+    jr   nc, .noadd
+    add  a, b
+.noadd:
+    rra
+    dec  d
+    jr   nz, .mul_loop
+
+    ; A:C = unsigned product. Move to HL.
+    ld   h, a
+    ld   l, c
+
+    ; Negate result if sign was negative
+    pop  af              ; 10T recover sign
+    or   a
+    jp   p, .done        ; 10T skip if positive
+    ; Negate HL: HL = 0 - HL
+    xor  a
+    sub  l
+    ld   l, a
+    sbc  a, a
+    sub  h
+    ld   h, a
+.done:
+    ret
+```
+
+En 2024, Gogin (de la escena ZX rusa) recopiló una colección de rutinas PRNG para Z80 y las compartió para evaluación. Gogin las probó sistemáticamente, llenando bitmaps grandes para revelar patrones estadísticos. Los resultados son instructivos -- no todas las rutinas "aleatorias" son igualmente aleatorias.
+
+#### Generador CMWC de Patrik Rak (Raxoft) (Mejor Calidad)
+
+```z80 id:ch04_mul_signed_c
+; mul_signed_c — signed multiply with A,C inputs
+; Input:  A = signed multiplicand, C = signed multiplier
+; Output: HL = signed 16-bit result
+; Cost:   ~250-270 T-states (Pentagon)
+
+mul_signed_c:
+    ld   b, a            ; 4T
+    jr   mul_signed      ; 12T  fall through to mul_signed
+```
+
+Este es un generador **Multiply-With-Carry Complementario** de Patrik Rak (Raxoft), usando el multiplicador 253 y un búfer circular de 8 bytes. Las matemáticas detrás de CMWC están bien estudiadas: George Marsaglia demostró que ciertas combinaciones de multiplicador/búfer producen secuencias con períodos enormes. Con multiplicador 253 y tamaño de búfer 8, el período teórico es (253^8 - 1) / 254 -- aproximadamente 2^66 valores antes de repetirse.
+
+El veredicto de Gogin: **mejor calidad** de la colección. Al llenar un bitmap de 256x192, no emergen patrones visibles ni siquiera a escalas grandes.
+
+El veredicto de Gogin: **segundo mejor**. Muy compacto, buena calidad para su tamaño.
+
+---
+
 ## Division en Z80
 
 La division en el Z80 es aun mas dolorosa que la multiplicacion. Sin instruccion de division, y el algoritmo es inherentemente serial -- cada bit del cociente depende de la resta anterior. Dark nuevamente presenta dos metodos: preciso y rapido.
@@ -117,7 +235,7 @@ La division en el Z80 es aun mas dolorosa que la multiplicacion. Sin instruccion
 
 Division larga binaria. Comienza con un acumulador en cero. El dividendo se desplaza desde la derecha, un bit por iteracion. Intenta restar el divisor; si tiene exito, establece un bit del cociente. Si falla, restaura el acumulador -- de ahi "division con restauracion".
 
-```z80
+```z80 id:ch04_method_1_shift_and_subtract
 ; DIVU111 -- 8-bit unsigned divide
 ; Input:  B = dividend, C = divisor
 ; Output: B = quotient, A = remainder
@@ -151,7 +269,7 @@ La version de 16 bits (DIVU222) cuesta de 938 a 1.034 T-states. Mil T-states por
 
 La alternativa mas rapida de Dark usa tablas de logaritmos:
 
-```
+```text
 Log(A / B) = Log(A) - Log(B)
 A / B = AntiLog(Log(A) - Log(B))
 ```
@@ -178,7 +296,7 @@ Medio periodo de coseno, de 0 a pi, se curva de +1 a -1. Una parabola y = 1 - 2*
 
 Dark genera una tabla de coseno de 256 bytes con signo (-128 a +127), indexada por angulo: 0 = 0 grados, 64 = 90 grados, 128 = 180 grados, 256 vuelve a 0. El periodo en potencia de dos significa que el indice de angulo se envuelve naturalmente con el desbordamiento de 8 bits, y el coseno se convierte en seno sumando 64.
 
-```z80
+```z80 id:ch04_the_parabolic_approximation
 ; Generate 256-byte signed cosine table (-128..+127)
 ; using parabolic approximation
 ;
@@ -243,7 +361,7 @@ En un bucle de Bresenham, en cada pixel preguntas: debo dar un paso lateral? Par
 
 La solucion de Dark: pre-computar el patron de pixeles para cada pendiente de linea dentro de una cuadricula de pixeles 8x8, y desenrollar el bucle de dibujo para emitir celdas de cuadricula completas de una vez. Un segmento de linea dentro de un area 8x8 esta completamente determinado por su pendiente. Para cada uno de los ocho octantes, enumera todos los patrones posibles de 8 pixeles como secuencias directas de instrucciones `SET bit,(HL)` con incrementos de direccion entre ellas.
 
-```z80
+```z80 id:ch04_dark_s_matrix_method_8x8
 ; Example: one unrolled 8-pixel segment of a nearly-horizontal line
 ; (octant 0: moving right, gently sloping down)
 ;
@@ -284,16 +402,16 @@ El Z80 no tiene unidad de punto flotante. Cada registro contiene un entero. Pero
 
 El formato mas comun en el Z80 es **8.8**: byte alto = parte entera, byte bajo = parte fraccionaria. Un par de registros de 16 bits contiene un numero de punto fijo:
 
-```
-H = parte entera    (-128..+127 con signo, o 0..255 sin signo)
-L = parte fraccionaria (0..255, representando 0/256 a 255/256)
+```text
+H = integer part    (-128..+127 signed, or 0..255 unsigned)
+L = fractional part (0..255, representing 0/256 to 255/256)
 ```
 
 `HL = $0180` representa 1,5 (H=1, L=128, y 128/256 = 0,5). `HL = $FF80` con signo es -0,5 (H=$FF = -1 en complemento a dos, L=$80 suma 0,5).
 
 La belleza: **la suma y la resta son gratuitas** -- solo operaciones normales de 16 bits:
 
-```z80
+```z80 id:ch04_format_8_8_2
 ; Fixed-point 8.8 addition: result = a + b
 ; HL = first operand, DE = second operand
     add  hl, de          ; that's it. 11 T-states.
@@ -309,7 +427,7 @@ Al procesador no le importa que estes tratando estos como punto fijo. La suma bi
 
 Multiplicar dos numeros 8.8 produce un resultado 16.16 -- 32 bits. Quieres 8.8 de vuelta, asi que tomas los bits 8..23 del producto (efectivamente desplazando 8 a la derecha). En la practica, con partes enteras pequenas (coordenadas, factores de rotacion entre -1 y +1), puedes descomponer la multiplicacion en productos parciales:
 
-```z80
+```z80 id:ch04_fixed_point_multiplication
 ; Fixed-point 8.8 multiply (simplified)
 ; Input:  BC = first operand (B.C in 8.8)
 ;         DE = second operand (D.E in 8.8)
@@ -401,7 +519,7 @@ El Z80 no tiene generador de numeros aleatorios por hardware. Debes sintetizar a
 
 El Z80 tiene una fuente incorporada de entropia a la que muchos coders recurren primero: el registro R. Se incrementa automaticamente con cada busqueda de instruccion (cada ciclo M1), ciclando de 0 a 127. Puedes leerlo en 9 T-states:
 
-```z80
+```z80 id:ch04_the_r_register_trick
     ld   a, r              ; 9 T -- read refresh counter
 ```
 
@@ -411,15 +529,15 @@ Algunos coders mezclan R en su generador en cada llamada, anadiendo entropia gen
 
 ### Cuatro Generadores de la Comunidad
 
-En 2024, Gogin (de la escena ZX rusa) recopilo una coleccion de rutinas PRNG para Z80 y las compartio para evaluacion. Gogin las probo sistematicamente, llenando bitmaps grandes para revelar patrones estadisticos. Los resultados son instructivos -- no todas las rutinas "aleatorias" son igualmente aleatorias.
+In 2024, Gogin (of the Russian ZX scene) assembled a collection of Z80 PRNG routines and shared them for evaluation. Gogin tested them systematically, filling large bitmaps to reveal statistical patterns. The results are instructive -- not all "random" routines are equally random.
 
 Aqui hay cuatro generadores de esa coleccion, ordenados de mejor a peor calidad.
 
-#### Generador CMWC de Patrik Rak (Mejor Calidad)
+#### Patrik Rak (Raxoft)'s CMWC Generator (Best Quality)
 
-Este es un generador **Multiply-With-Carry Complementario** de Patrik Rak, usando el multiplicador 253 y un buffer circular de 8 bytes. Las matematicas detras de CMWC estan bien estudiadas: George Marsaglia demostro que ciertas combinaciones de multiplicador/buffer producen secuencias con periodos enormes. Con multiplicador 253 y tamano de buffer 8, el periodo teorico es (253^8 - 1) / 254 -- aproximadamente 2^66 valores antes de repetirse.
+This is a **Complement Multiply-With-Carry** generator by Patrik Rak (Raxoft), using the multiplier 253 and an 8-byte circular buffer. The mathematics behind CMWC are well-studied: George Marsaglia proved that certain multiplier/buffer combinations produce sequences with enormous periods. With multiplier 253 and buffer size 8, the theoretical period is (253^8 - 1) / 254 -- approximately 2^66 values before repeating.
 
-```z80
+```z80 id:ch04_four_generators_from_the
 ; Patrik Rak's CMWC PRNG
 ; Quality: Excellent -- passes visual bitmap tests
 ; Size:    ~30 bytes code + 8 bytes table
@@ -458,13 +576,13 @@ patrik_rak_cmwc_rnd:
 
 El algoritmo multiplica la entrada actual del buffer por 253, suma un valor de acarreo, almacena el nuevo acarreo y complementa el resultado. El buffer circular de 8 bytes significa que el espacio de estados del generador es vasto -- 8 bytes de buffer mas 1 byte de acarreo mas el indice, dando mucho mas estado interno del que cualquier generador de un solo registro puede lograr.
 
-El veredicto de Gogin: **mejor calidad** de la coleccion. Al llenar un bitmap de 256x192, no emergen patrones visibles ni siquiera a escalas grandes.
+Gogin's verdict: **best quality** in the collection. When filling a 256x192 bitmap, no visible patterns emerge even at large scales.
 
 #### Ion Random (Segundo Mejor)
 
 Originalmente de Ion Shell para la calculadora TI-83, adaptado para Z80. Este generador mezcla el registro R con un bucle de retroalimentacion, logrando una aleatoriedad sorprendentemente buena con solo ~15 bytes:
 
-```z80
+```z80 id:ch04_four_generators_from_the_2
 ; Ion Random
 ; Quality: Good -- minor patterns visible only at extreme scale
 ; Size:    ~15 bytes
@@ -486,13 +604,13 @@ ion_rnd:
 
 La inyeccion del registro R significa que este generador produce secuencias diferentes dependiendo del contexto de llamada -- cuantas instrucciones se ejecutan entre llamadas afecta a R, que retroalimenta al estado. Para un bucle principal de demo con temporizado fijo, R avanza predeciblemente, pero la mezcla no lineal (ADD + XOR) aun produce buena salida. En un juego donde la entrada del jugador varia el patron de llamada, la contribucion de R anade verdadera impredecibilidad.
 
-El veredicto de Gogin: **segundo mejor**. Muy compacto, buena calidad para su tamano.
+Gogin's verdict: **second best**. Very compact, good quality for its size.
 
 #### XORshift de 16 bits (Mediocre)
 
 Un generador XORshift de 16 bits -- la adaptacion Z80 de la conocida familia de Marsaglia:
 
-```z80
+```z80 id:ch04_four_generators_from_the_3
 ; 16-bit XORshift PRNG
 ; Quality: Mediocre -- visible diagonal patterns in bitmap tests
 ; Size:    ~25 bytes
@@ -522,9 +640,9 @@ xorshift_rnd:
 
 Los generadores XORshift son rapidos y simples, pero con solo 16 bits de estado el periodo es como maximo 65.535. Mas problematico, el patron de rotacion de bits crea rayas diagonales visibles cuando la salida se mapea a pixeles. Para un campo de estrellas rapido o efecto de particulas esto puede ser aceptable. Para cualquier cosa que llene areas grandes de pantalla con "ruido", los patrones se vuelven obvios.
 
-#### Variante CMWC de Raxoft (Mediocre)
+#### Patrik Rak's CMWC Variant (Mediocre)
 
-Una variante CMWC de Raxoft, similar en principio a la version de Patrik Rak pero con un arreglo de buffer diferente. Gogin encontro que producia **patrones visibles a escala** -- probablemente debido a como la propagacion del acarreo interactua con la indexacion del buffer. Lo incluimos en el ejemplo compilable (`examples/prng.a80`) por completitud, pero para uso en produccion, la version de Patrik Rak es estrictamente superior.
+A second CMWC variant by Patrik Rak (Raxoft), similar in principle to his version above but with a different buffer arrangement. Gogin found it produced **visible patterns at scale** -- likely due to the way the carry propagation interacts with the buffer indexing. We include it in the compilable example (`examples/prng.a80`) for completeness, but for production use, his 8-byte-buffer version above is strictly superior.
 
 ### El Enfoque Tribonacci de Elite
 
@@ -532,11 +650,11 @@ Vale la pena una breve mencion: el legendario *Elite* (1984) uso una secuencia t
 
 ### El Generador de Galaxias de Elite: Una Mirada Mas Profunda
 
-El enfoque Tribonacci merece mas detalle porque ilustra un principio profundo: **un PRNG no es solo una fuente de numeros aleatorios -- es un algoritmo de compresion.**
+The Tribonacci approach deserves more detail because it illustrates a key principle: **a PRNG is not just a random number source -- it is a compression algorithm.**
 
 David Braben e Ian Bell necesitaban 8 galaxias de 256 sistemas estelares, cada uno con un nombre, posicion, economia, tipo de gobierno y nivel tecnologico. Almacenar todo eso explicitamente consumiria kilobytes. En su lugar, almacenaron solo una semilla de 6 bytes por galaxia y un generador determinista que expandia cada semilla en los datos completos del sistema estelar. El generador era un bucle de retroalimentacion de tres registros -- cada paso rota y aplica XOR a tres valores de 16 bits:
 
-```
+```z80 id:ch04_elite_s_galaxy_generator_a
 ; Elite's galaxy generator (conceptual, 6502 origin):
 ;   seed = [s0, s1, s2]  (three 16-bit words)
 ;   twist: s0' = s1, s1' = s2, s2' = s0 + s1 + s2  (mod 65536)
@@ -555,13 +673,13 @@ Trucos comunes en el Z80:
 
 - **Distribucion triangular** -- suma dos bytes aleatorios uniformes y desplaza a la derecha. La suma se agrupa alrededor del centro (128), produciendo variacion de "aspecto natural". Coste: dos llamadas al PRNG + ADD + SRL = ~20 T-states adicionales.
 
-```z80
+```z80 id:ch04_shaped_randomness
 ; Triangular random: result clusters around 128
     call patrik_rak_cmwc_rnd  ; A = uniform random
     ld   b, a
     call patrik_rak_cmwc_rnd  ; A = another uniform random
     add  a, b                 ; sum (wraps at 256)
-    rra                       ; divide by 2 -> triangular distribution
+    rra                       ; divide by 2 → triangular distribution
 ```
 
 - **Muestreo por rechazo** -- genera un numero aleatorio, rechaza valores fuera de tu rango deseado. Para rangos en potencia de dos esto es gratuito (solo AND con una mascara). Para rangos arbitrarios, itera hasta que el valor encaje.
@@ -576,9 +694,9 @@ En una demo, la reproducibilidad es usualmente deseable: el efecto deberia verse
 
 En un juego, la impredecibilidad importa. Estrategias comunes de sembramiento:
 
-- **Variable de sistema FRAMES ($5C78)** -- la ROM del Spectrum mantiene un contador de fotogramas de 3 bytes en la direccion $5C78 que se incrementa cada 1/50 de segundo desde el encendido. Leerlo da una semilla dependiente del tiempo que varia con cuanto tiempo ha estado funcionando la maquina. Art-top recomienda usarlo para inicializar la tabla CMWC de Patrik Rak:
+- **FRAMES system variable ($5C78)** -- the Spectrum ROM maintains a 3-byte frame counter at address $5C78 that increments every 1/50th of a second from power-on. Reading it gives a time-dependent seed that varies with how long the machine has been running. Art-top (Artem Topchiy) recommends using it to initialise Patrik Rak's CMWC table:
 
-```z80
+```z80 id:ch04_seeds_and_reproducibility
 ; Seed Patrik Rak CMWC from FRAMES system variable
     ld   hl, $5C78            ; FRAMES (3 bytes, increments at 50 Hz)
     ld   a, (hl)              ; low byte -- most variable
@@ -601,18 +719,22 @@ Para demos, simplemente inicializa el estado del generador a un valor conocido y
 
 ### Tabla Comparativa
 
-| Algoritmo | Tamano (bytes) | Velocidad (T-states) | Calidad | Periodo | Notas |
-|-----------|---------------|---------------------|---------|--------|-------|
-| Patrik Rak CMWC | ~30 + 8 tabla | ~170 | Excelente | ~2^66 | Mejor en general; buffer de 8 bytes |
-| Ion Random | ~15 | ~75 | Buena | Depende de R | Compacto; mezcla registro R |
-| XORshift 16 | ~25 | ~90 | Mediocre | 65.535 | Patrones diagonales visibles |
-| Raxoft CMWC | ~35 + 10 tabla | ~180 | Mediocre | ~2^66 | Patrones visibles a escala |
-| LD A,R solo | 2 | 9 | Pobre | 128 | NO es un PRNG; usar solo como semilla |
+| Algorithm | Size (bytes) | Speed (T-states) | Quality | Period | Notes |
+|-----------|-------------|-------------------|---------|--------|-------|
+| Patrik Rak CMWC | ~30 + 8 table | ~170 | Excellent | ~2^66 | Best overall; 8-byte buffer |
+| Ion Random | ~15 | ~75 | Good | Depends on R | Compact; mixes R register |
+| XORshift 16 | ~25 | ~90 | Mediocre | 65,535 | Visible diagonal patterns |
+| Patrik Rak CMWC (alt) | ~35 + 10 table | ~180 | Mediocre | ~2^66 | Patterns visible at scale |
+| LD A,R alone | 2 | 9 | Poor | 128 | NOT a PRNG; use as seed only |
 
 Para la mayoria del trabajo de demoscene, el **CMWC de Patrik Rak** es el claro ganador: excelente calidad, tamano razonable y un periodo tan largo que nunca se repetira durante una demo. Si el tamano del codigo es critico (sizecoding, intros de 256 bytes), **Ion Random** empaqueta una calidad notable en 15 bytes. XORshift es un recurso de emergencia cuando necesitas algo rapido y no te importa la calidad visual.
 
-> **Creditos:** Coleccion de PRNG, evaluacion de calidad y pruebas de bitmap por **Gogin**. El generador CMWC de Patrik Rak se basa en la teoria de Multiply-With-Carry Complementario de George Marsaglia. Ion Random se origina en **Ion Shell** para la calculadora TI-83.
+> **Credits:** PRNG collection, quality assessment, and bitmap testing by **Gogin**. Patrik Rak's CMWC generator is based on George Marsaglia's Complementary Multiply-With-Carry theory. Ion Random originates from **Ion Shell** for the TI-83 calculator.
+
+![PRNG output — random attribute colours fill the screen, revealing the generator's statistical quality](../../build/screenshots/ch04_prng.png)
 
 ---
 
 *Todos los conteos de ciclos en este capitulo son para temporizado Pentagon (sin estados de espera). En un Spectrum 48K estandar o Scorpion con memoria contendida, espera conteos mas altos para codigo ejecutandose en los 32K inferiores de RAM. Ver Apendice A para la referencia completa de temporizado.*
+
+> **Sources:** Dark / X-Trade, "Programming Algorithms" (Spectrum Expert #01, 1997); Gogin, PRNG collection and quality assessment; Patrik Rak (Raxoft), CMWC generator; Ped7g (Peter Helcmanovsky), signed arithmetic gap identification and review

@@ -73,6 +73,30 @@ No puedes tener las tres. Exomizer gana en tasa pero es lento para descomprimir 
 
 El genio de Introspec fue mapear estas compensaciones en una frontera de Pareto --- una curva donde ninguna herramienta puede mejorar en una dimensión sin perder en otra. Si un compresor está dominado en los tres ejes por otra herramienta, es obsoleto. Si está en la frontera, es la elección correcta para algún caso de uso.
 
+<!-- figure: ch14_compression_tradeoff -->
+
+```mermaid id:ch14_the_tradeoff_triangle
+graph LR
+    SRC["Source Data<br>(raw bytes)"] --> EXO["Exomizer<br>48.3% ratio<br>~250 T/byte<br>170B decompressor"]
+    SRC --> APL["ApLib<br>49.2% ratio<br>~105 T/byte<br>199B decompressor"]
+    SRC --> PLT["Pletter 5<br>51.5% ratio<br>~69 T/byte<br>~120B decompressor"]
+    SRC --> ZX0["ZX0<br>~52% ratio<br>~100 T/byte<br>~70B decompressor"]
+    SRC --> LZ4["LZ4<br>58.6% ratio<br>~34 T/byte<br>~100B decompressor"]
+
+    EXO --> T1["Best ratio<br>Slowest decompression"]
+    LZ4 --> T2["Worst ratio<br>Fastest decompression"]
+    ZX0 --> T3["Smallest decompressor<br>Good all-around"]
+
+    style EXO fill:#fdd,stroke:#333
+    style LZ4 fill:#ddf,stroke:#333
+    style ZX0 fill:#dfd,stroke:#333
+    style T1 fill:#fdd,stroke:#933
+    style T2 fill:#ddf,stroke:#339
+    style T3 fill:#dfd,stroke:#393
+```
+
+> **El compromiso:** Menor tamaño comprimido = descompresión más lenta. Ningún compresor gana en los tres ejes (ratio, velocidad, tamaño del descompresor). Elige según tu caso de uso: Exomizer para cargas únicas, LZ4 para streaming en tiempo real, ZX0 para intros de sizecoding.
+
 Sus recomendaciones prácticas son nítidas:
 
 - **Máxima compresión, velocidad irrelevante:** Exomizer. Usar para descompresión única al momento de carga --- pantallas de carga, datos de nivel, cualquier cosa que desempaques una vez en un búfer y uses repetidamente.
@@ -109,7 +133,7 @@ ZX7 ya era notable: un descompresor de 69 bytes que lograba tasas de compresión
 
 El descompresor Z80 para ZX0 es ensamblador optimizado a mano, diseñado específicamente para el conjunto de instrucciones del Z80. Explota el registro de banderas del Z80, sus instrucciones de transferencia de bloques, y la temporización exacta de los saltos condicionales para exprimir máxima funcionalidad en mínimos bytes. Aquí está el tipo de código del que hablamos:
 
-```z80
+```z80 id:ch14_the_decompressor
 ; ZX0 decompressor — standard version
 ; HL = source (compressed data)
 ; DE = destination (output buffer)
@@ -158,7 +182,7 @@ No todo necesita un compresor LZ completo. Dos técnicas más simples manejan ti
 
 El esquema más simple: reemplazar una serie de bytes idénticos con un conteo y un valor. El descompresor es trivial:
 
-```z80
+```z80 id:ch14_rle_run_length_encoding
 ; Minimal RLE decompressor — HL = source, DE = destination
 rle_decompress:
         ld      a, (hl)         ; read count
@@ -174,13 +198,185 @@ rle_decompress:
         jr      rle_decompress
 ```
 
-Menos de 30 bytes de código del descompresor. RLE comprime maravillosamente cuando los datos contienen series largas --- pantallas en blanco, fondos de color sólido, rellenos de atributos. Comprime terriblemente en arte de píxeles complejo. La ventaja sobre LZ: para intros de sizecoding donde incluso los 70 bytes de ZX0 se sienten caros, un esquema RLE personalizado libera espacio precioso.
+Solo 12 bytes de código del descompresor. RLE comprime maravillosamente cuando los datos contienen series largas --- pantallas en blanco, fondos de color sólido, rellenos de atributos. Comprime terriblemente en arte de píxeles complejo. La ventaja sobre LZ: para intros de sizecoding donde incluso los 70 bytes de ZX0 se sienten caros, un esquema RLE de 12 bytes libera espacio precioso.
+
+RLE también se beneficia de la **transposición de datos**: si tus datos son un bloque 2D (ej., 32×24 atributos) donde las columnas son más uniformes que las filas, transponer a orden columna-principal crea series más largas. El coste es una pasada de des-transposición después de la descompresión (~13 T-states/byte). Si el total (descompresor de 12 bytes + código de des-transposición + datos comprimidos) supera a ZX0 (descompresor de 70 bytes + datos comprimidos) depende de tus datos --- mide ambos.
+
+> **Recuadro: El RLE Auto-Modificable de Ped7g --- 9 Bytes que se Reescriben a Sí Mismos**
+>
+> Para intros de 256 bytes, incluso 12 bytes se siente caro. Ped7g (Peter Helcmanovsky, mantenedor de sjasmplus) contribuyó un desempaquetador RLE auto-modificable que comprime el decodificador en sí a **9 bytes de código central** --- y el mecanismo de salida está integrado en el flujo de datos.
+>
+> El truco: los datos RLE residen en memoria *antes* del código del desempaquetador. El flujo de datos termina con los bytes `$18, $00`, que el desempaquetador escribe en el búfer de destino en una posición calculada de modo que los bytes sobrescriben la instrucción `ld (hl),c`. La secuencia de bytes `$18, $23` se ensambla como `jr +$23`, que salta hacia adelante más allá del desempaquetador hasta el código principal de la intro. Los datos literalmente reescriben el código para terminarse a sí mismo.
+>
+> Aquí está la mini-intro completa funcional --- un binario de 120 bytes que llena la pantalla con franjas de colores usando solo el RLE auto-modificable:
+>
+> ```z80 id:ch14_ped7g_rle_mini_intro
+> ; Ped7g's self-modifying RLE mini-intro
+> ; Assemble with sjasmplus: sjasmplus rle_intro.a80
+> ;
+> ; The RLE data is a stream of (value, count) pairs read via POP BC.
+> ; SP walks through the data as a read pointer.
+> ; The db $18,$00 at the end of the data stream overwrites ld (hl),c
+> ; to become jr +$23, exiting the depack loop into intro_start.
+> ;
+> ; Contributed by Ped7g (Peter Helcmanovsky) — sjasmplus maintainer
+> ; and ZX Spectrum Next contributor. Used with permission.
+>
+>     DEVICE ZXSPECTRUM48, $8000
+>
+> target  EQU $4000
+>     ORG $5B00              ; loading address → print buffer
+>
+> intro_data:
+>     dw  target             ; initial HL value (POP HL)
+> ; RLE pairs: value, count (count=0 means 256 iterations)
+>     .(4*3) db $AA, 0, $00, 0    ; alternating stripe pattern
+>     db  $43, 32*2, $44, 32*4, $45, 32*3, $46, 32*2, $47, 32*2
+>     db  $46, 32*2, $45, 32*3, $44, 32*4, $43, 32*2
+>     db  $18, $00           ; data that will overwrite ld (hl),c
+>                            ; creating jr rle_loop_inner+$25
+> rle_start:
+>     ei                     ; simulate post-LOAD BASIC environment
+>     ld  sp, intro_data
+>     pop hl                 ; HL = target address
+> rle_loop_outer:
+>     pop bc                 ; C = value, B = repeat count
+> rle_loop_inner:
+>     ld  (hl), c            ; ← THIS instruction gets overwritten
+>     inc hl                 ;   by the $18,$00 data to become
+>     djnz rle_loop_inner    ;   jr +$23, jumping to intro_start
+>     jr  rle_loop_outer
+> ; 31 bytes of space — fill with helper code
+>     ds  $1F
+> intro_start:
+>     assert $ == rle_loop_inner + 2 + $23
+>     inc a
+>     and 7
+>     out (254), a           ; cycle border colours
+>     jr  intro_start
+>
+>     SAVESNA "rle_intro.sna", rle_start
+>     SAVEBIN "rle_intro.bin", intro_data, $ - intro_data
+> ```
+>
+> ![Mini-intro RLE auto-modificable de 120 bytes de Ped7g ejecutándose en ZX Spectrum --- franjas de atributos de colores desempaquetadas por un bucle de desempaquetado de 9 bytes, borde arcoíris del OUT (254),A cíclico](../../build/screenshots/ch14_rle_intro.png)
+>
+> **Análisis del conteo de bytes.** El bucle de desempaquetado tiene 9 bytes: `pop bc` (1) + `ld (hl),c` (1) + `inc hl` (1) + `djnz` (2) + `jr` (2) + `pop hl` (1) + `ld sp,nn` (3) = 9 de núcleo + 6 de configuración = **15 bytes en total** para un decodificador RLE autónomo con salida integrada. Compara con el RLE mínimo de 12 bytes de la sección anterior, que aún necesita configuración externa y una verificación de terminación.
+>
+> **Seguridad de interrupciones.** SP se usa como puntero de datos, así que las interrupciones corromperán la pila. El `ei` al inicio es intencional --- en una intro de 256 bytes cargada desde BASIC, las interrupciones ya están habilitadas. La interrupción ocasional escribe en datos ya consumidos detrás del puntero SP, así que el desempaquetado se completa correctamente. Para el código de la intro en sí, SP se ha movido más allá de los datos y la pila funciona normalmente. Pero no combines esta técnica con IM2 o música dirigida por interrupciones.
+>
+> **Variantes avanzadas.** Ped7g nota varias estrategias de salida alternativas: (1) si el área de destino se extiende detrás del código de desempaquetado, los datos RLE pueden sobrescribir el desplazamiento de `jr rle_loop_outer` para saltar más lejos; (2) el truco `jp $C3C3` --- coloca valores `$C3` en los datos con conteos exactos para que DJNZ termine cuando `jp $C3C3` se ensamble en memoria, y alinea la intro para que la dirección $C3C3 sea el código de continuación. Como dice Ped7g: "puedes inventar muchas cosas así --- siempre depende de la situación específica."
+>
+> **Crédito:** Contribuido por Ped7g (Peter Helcmanovsky) --- mantenedor de sjasmplus y colaborador del ZX Spectrum Next. Usado con permiso.
 
 ### Codificación delta: almacenar lo que cambió
 
 La codificación delta almacena diferencias entre valores consecutivos en lugar de valores absolutos. ¿Dos fotogramas de animación que son 90% idénticos? Almacena solo los bytes que cambiaron --- una lista de pares (posición, nuevo_valor). Si solo difieren 691 bytes de 6.912, el delta es 2.073 bytes (3 bytes por cambio) en lugar de un fotograma completo. Aplica LZ encima del flujo delta y se comprime aún más --- el flujo de diferencias tiene más ceros y pequeños valores repetidos que los datos crudos del fotograma.
 
 El Magen Fractal de Break Space explota esto: 122 fotogramas a 6.912 bytes cada uno, comprimidos a 10.512 bytes en total, porque cada fotograma difiere del anterior en una cantidad pequeña. Delta + LZ es la cadena estándar para animaciones de múltiples fotogramas, mapas de baldosas con desplazamiento, y animaciones de sprites donde la figura cambia de pose pero el fondo permanece fijo.
+
+---
+
+## Preparación de Datos Pre-Compresión
+
+La codificación delta no es el único truco. El compresor solo ve el flujo de bytes que le proporcionas. Si reestructuras los datos antes de la compresión, el mismo algoritmo LZ puede lograr ratios drásticamente diferentes. Este es el arte de la preparación pre-compresión --- y a menudo es más valioso que cambiar de empaquetador.
+
+### Entropía: el suelo teórico
+
+La entropía de Shannon mide los bits mínimos por byte necesarios para representar tus datos, asumiendo un codificador ideal. Un flujo de bytes completamente aleatorio tiene una entropía de 8,0 bits/byte --- incompresible. Un archivo de bytes idénticos tiene entropía 0,0. Los datos reales del Spectrum caen en algún punto intermedio. Una tabla de seno sin procesar podría tener una entropía de 6,75 bits/byte. Aplica codificación delta, y baja a 2,85. Aplica la segunda derivada, y cae a 1,49 --- una reducción del 78%. Ese es el margen teórico con el que el compresor tiene que trabajar.
+
+No necesitas computar la entropía a mano. La fórmula es lo suficientemente simple para un script de Python:
+
+```python
+import math
+from collections import Counter
+
+def entropy(data: bytes) -> float:
+    """Shannon entropy in bits per byte. Lower = more compressible."""
+    counts = Counter(data)
+    n = len(data)
+    return -sum(c/n * math.log2(c/n) for c in counts.values())
+```
+
+Ejecuta esto en tus datos sin procesar, luego en datos codificados con delta, luego en datos transpuestos. La transformación que dé la menor entropía se comprimirá mejor, independientemente del empaquetador que uses.
+
+### La segunda derivada: datos sinusoidales y cuadráticos
+
+La codificación delta almacena las primeras diferencias: `d[i] = data[i] - data[i-1]`. Para una rampa lineal (0, 3, 6, 9...), el flujo delta es constante (3, 3, 3...) --- perfecto para compresión. Pero las ondas sinusoidales y las curvas suaves producen un flujo delta que a su vez varía suavemente. La segunda derivada (delta del delta) captura esto:
+
+| Tipo de datos | Entropía sin procesar | 1ª derivada | 2ª derivada |
+|---|---|---|---|
+| Tabla de seno (256B) | 6,75 | 2,85 | **1,49** |
+| Rampa lineal | 7,00 | 0,00 | 0,00 |
+| Curva cuadrática | 6,80 | 3,20 | **0,00** |
+| Bytes aleatorios | 8,00 | 8,00 | 8,00 |
+
+La segunda derivada de una función cuadrática es una constante. Esto no es cálculo abstracto --- es la diferencia entre 6,80 y 0,00 bits por byte. Una tabla de consulta cuadrática de 256 bytes, codificada con segunda derivada, se comprime a casi nada.
+
+Aquí está la perspicacia creativa: la decadencia sinusoidal y la decadencia cuadrática son a menudo visualmente indistinguibles en un efecto de demo. Si estás animando una partícula que desacelera, la audiencia no puede distinguir si usaste `sin(t)` o `at² + bt + c`. Pero el compresor sí: la versión cuadrática tiene una primera derivada perfectamente lineal y una segunda derivada constante. Si tu animación puede tolerar una aproximación cuadrática, ahorras bytes no cambiando de compresor, sino cambiando de curvas.
+
+### Transposición: columna-principal para datos tabulares
+
+Los datos de la demoscene a menudo son tabulares --- tablas de vértices 3D (X, Y, Z por vértice), fotogramas clave de animación (ángulo, radio, velocidad por fotograma), paletas de colores (R, G, B por entrada). Cuando se almacenan en orden fila-principal (X₀ Y₀ Z₀ X₁ Y₁ Z₁...), los bytes consecutivos son de diferentes columnas con diferentes propiedades estadísticas. La codificación delta empeora esto:
+
+```
+Row-major:  128 64 200 129 63 201 130 62 202 ...
+Delta:        64 136  57 190 138  57 190 138 ...  (wild jumps between columns)
+```
+
+Transpón a columna-principal (X₀ X₁ X₂... Y₀ Y₁ Y₂... Z₀ Z₁ Z₂...) y ahora los bytes consecutivos son de la misma columna. La codificación delta ahora ve progresiones suaves:
+
+```
+Column-major: 128 129 130 131 ... 64 63 62 61 ... 200 201 202 203 ...
+Delta:          1   1   1   1 ...  -1  -1  -1 ...    1   1   1   1 ...  (trivial)
+```
+
+Los números son contundentes. Una tabla de vértices de 768 bytes (256 vértices × 3 columnas):
+
+| Disposición | Entropía (sin procesar) | Entropía (delta) |
+|---|---|---|
+| Fila-principal (X,Y,Z entrelazados) | 7,52 | 7,66 (¡peor!) |
+| Columna-principal, stride 3 | 7,52 | **2,58** |
+
+La codificación delta en datos fila-principal *aumentó* la entropía. El mismo delta en datos transpuestos la redujo un 65%. El compresor no sabe que tus datos son tabulares --- tienes que decírselo, reordenando.
+
+La regla: si tus datos tienen columnas con diferentes patrones, **siempre transpón antes de comprimir**. El stride (número de columnas) no necesita adivinarse --- prueba algunos divisores de la longitud de datos y elige el que dé la menor entropía delta.
+
+En el Spectrum, el descompresor simplemente escribe bytes secuencialmente. La transposición ocurre en tus herramientas de compilación, no en tiempo de ejecución. Coste en tiempo de ejecución: cero.
+
+### Entrelazado de planos: máscaras y píxeles
+
+Los sprites con máscaras son un caso especial de transposición. Almacenados como máscara-píxel-máscara-píxel por fila, los bytes consecutivos alternan entre dos distribuciones completamente diferentes (las máscaras son mayormente $FF o $00; los píxeles tienen valores diversos). Separa todos los bytes de máscara de todos los bytes de píxeles:
+
+```
+Before: FF 3C FF 18 FF 00 ...  (mask, pixel, mask, pixel)
+After:  FF FF FF ... 3C 18 00 ...  (all masks, then all pixels)
+```
+
+El bloque de máscaras se comprime a casi nada (series largas de $FF). El bloque de píxeles se comprime normalmente. El ratio combinado mejora un 10--20% respecto al almacenamiento entrelazado, dependiendo de la complejidad del sprite.
+
+### Detección de patrones: cuándo no comprimir
+
+A veces los datos tienen estructura que un generador puede reproducir más económicamente que un descompresor. Si tus datos son periódicos con período *P*, almacenar un período más un pequeño bucle de reproducción ocupa *P* + ~10 bytes. Si *P* es pequeño en relación al total de datos, esto supera a cualquier compresor.
+
+Las tablas de seno son el caso canónico. Una tabla de seno de 256 bytes se comprime a ~140 bytes con ZX0. Pero un generador de seno compatible con el Spectrum (usando la calculadora ROM o un kernel CORDIC) produce los mismos 256 bytes desde menos de 30 bytes de código. Para precisión de calidad demo, incluso una simple aproximación cuadrática por cuarto de onda es suficiente.
+
+El árbol de decisión: (1) ¿Puedes generarlo a partir de una fórmula en menos bytes que el tamaño comprimido? Genera. (2) ¿Son los datos periódicos? Almacena un período + bucle. (3) ¿Son los datos tabulares? Transpón + delta + LZ. (4) ¿Son los datos fotogramas secuenciales? Delta + LZ. (5) ¿Ninguno de los anteriores? Simplemente comprímelo.
+
+### Transformaciones prácticas para datos comunes de demo
+
+| Tipo de datos | Mejor pre-transformación | Por qué |
+|---|---|---|
+| Tablas de seno/coseno | 2ª derivada, o generar en tiempo de ejecución | Aceleración suave → 2ª derivada constante |
+| Tablas de vértices 3D | Transponer (stride = campos por vértice) + delta | Separa ejes; trayectorias suaves por eje |
+| Animación precalculada | Delta entre fotogramas + LZ | Alta redundancia entre fotogramas |
+| Volcados de registros AY | Transponer (stride = 14, uno por registro) + delta | Cada registro varía suavemente entre fotogramas |
+| Rampas de color / gradientes | 1ª derivada | Progresión lineal o casi lineal |
+| Mapas de tiles | Transponer (stride = ancho del mapa) + delta | Localidad espacial: tiles adyacentes son similares |
+| Datos de fuente bitmap | Separar planos de bits, o almacenar como 1 bit + RLE | Muchos bytes cero en descendentes |
+| Posiciones de partículas | Ordenar por un eje, luego codificar delta cada eje | El orden clasificado maximiza la compresión delta |
+
+La perspicacia clave: **cada byte que ahorras con una pre-transformación gratuita es un byte que no necesitas que un empaquetador más caro ahorre**. Transponer + delta + Pletter 5 (descompresor rápido) a menudo supera a Exomizer sin procesar (descompresor lento) en datos estructurados. Obtienes un mejor ratio *y* descompresión más rápida.
 
 ---
 
@@ -192,14 +388,14 @@ Entender los algoritmos de compresión es útil. Integrarlos en tu cadena de com
 
 La cadena: activo fuente (PNG) --> conversor (png2scr) --> compresor (zx0) --> ensamblador (sjasmplus) --> archivo .tap. El compresor se ejecuta en tu máquina de desarrollo, no en el Spectrum. Para ZX0: `zx0 screen.scr screen.zx0`. Incluye el resultado con la directiva INCBIN de sjasmplus:
 
-```z80
+```z80 id:ch14_from_asset_to_binary
 compressed_screen:
     incbin "assets/screen.zx0"
 ```
 
 En tiempo de ejecución, descomprime con una simple llamada:
 
-```z80
+```z80 id:ch14_from_asset_to_binary_2
     ld   hl, compressed_screen    ; source: compressed data
     ld   de, $4000                ; destination: screen memory
     call dzx0_standard            ; decompress
@@ -224,7 +420,7 @@ Cambia un PNG fuente, ejecuta `make`, y el binario comprimido se regenera autom�
 
 Un ejemplo mínimo completo --- descomprimir una pantalla de carga a la memoria de vídeo y esperar a que se pulse una tecla:
 
-```z80
+```z80 id:ch14_example_loading_screen_with
 ; loading_screen.asm — assemble with sjasmplus
         org  $8000
 start:
@@ -246,6 +442,8 @@ compressed_screen:
 
         display "Total: ", /d, $ - start, " bytes"
 ```
+
+![Demo de descompresión ZX0 -- una pantalla de carga comprimida desempaquetada a memoria de vídeo en tiempo real](../../build/screenshots/ch14_decompress.png)
 
 Usa la directiva DISPLAY de sjasmplus para imprimir información de tamaño durante el ensamblaje. Siempre sabe exactamente qué tan grandes son tus datos comprimidos --- la diferencia entre ZX0 y Exomizer en una sola pantalla de carga puede ser 400 bytes, y a lo largo de 8 escenas eso se acumula.
 
@@ -307,4 +505,8 @@ Los números son la respuesta. No opiniones, no folklore, no "escuché que Exomi
 
 4. **Integra compresión en un Makefile.** Configura un proyecto con un Makefile que automáticamente comprima activos como paso de compilación. Cambia un PNG fuente, ejecuta `make`, y verifica que el binario comprimido se regenera y el archivo .tap final se actualiza. Este es el flujo de trabajo que usarás para cada proyecto a partir de ahora.
 
-> **Fuentes:** Introspec "Data Compression for Modern Z80 Coding" (Hype, 2017); Introspec "Compression on the Spectrum: MegaLZ" (Hype, 2019); Break Space NFO (Thesuper, 2016); Einar Saukas, ZX0 (github.com/einar-saukas/ZX0)
+5. **Transponer y medir.** Crea un archivo de 768 bytes con 256 tripletas (X, Y, Z) donde X es una onda sinusoidal, Y es un coseno, y Z es una rampa lineal. Mide la entropía del archivo sin procesar. Luego transpónlo (todos los valores X, luego todos los Y, luego todos los Z) y mide de nuevo. Aplica codificación delta a ambas versiones y compara. Deberías ver la versión transpuesta+delta caer por debajo de 3 bits/byte, mientras que la versión sin procesar+delta se mantiene por encima de 7. Comprime ambas con ZX0 y compara los tamaños reales --- los números de entropía predicen al ganador.
+
+6. **La sustitución cuadrática.** Genera una tabla de seno de 256 bytes y una aproximación cuadrática de 256 bytes (ajusta `ax² + bx + c` a un cuarto de onda, espeja para el ciclo completo). Grafica ambas --- deberían ser visualmente idénticas. Ahora computa la segunda derivada de cada una. La segunda derivada del seno tiene una entropía de ~1,5 bits/byte; la del cuadrático es exactamente 0. Comprime ambas con ZX0. La versión cuadrática es más pequeña, y la animación se ve igual.
+
+> **Fuentes:** Introspec "Data Compression for Modern Z80 Coding" (Hype, 2017); Introspec "Compression on the Spectrum: MegaLZ" (Hype, 2019); Break Space NFO (Thesuper, 2016); Einar Saukas, ZX0 (github.com/einar-saukas/ZX0); Ped7g (Peter Helcmanovsky), desempaquetador RLE auto-modificable (contribuido con permiso, 2026)

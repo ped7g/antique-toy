@@ -39,7 +39,7 @@ En el ecuador, las distancias de salto son aproximadamente uniformes --- la imag
 
 El bucle interno generado tiene una estructura repetitiva. Para cada byte de pantalla (ocho píxeles empaquetados), ejecuta una secuencia como esta:
 
-```z80
+```z80 id:ch06_inside_the_disassembly
 ; --- Accumulating 8 source pixels into one screen byte ---
 ; HL points into the source image (one byte per pixel)
 ; A is the accumulator, building the screen byte bit by bit
@@ -66,7 +66,7 @@ El detalle clave: entre cada `add a,(hl)`, el número de instrucciones `inc l` v
 
 Veamos más cuidadosamente qué sucede con un solo píxel:
 
-```z80
+```z80 id:ch06_inside_the_disassembly_2
     add  a,a          ;  4 T-states  (shift A left by 1)
     add  a,(hl)       ;  7 T-states  (add source pixel into bit 0)
     inc  l            ;  4 T-states  (advance source pointer)
@@ -97,7 +97,7 @@ El costo fijo por píxel es:
 
 Para 8 píxeles, el costo fijo es 8 x 15 = 120 T-states. Pero hay sobrecarga adicional por byte: el código debe escribir el byte completado en la memoria de pantalla y prepararse para el siguiente. Supongamos que la secuencia de salida se ve algo así:
 
-```z80
+```z80 id:ch06_counting_t_states
     ld   (de),a       ;  7 T-states  (write screen byte)
     inc  e            ;  4 T-states  (advance screen pointer)
 ```
@@ -122,6 +122,8 @@ El bloque de código generado se llama entonces directamente. La CPU ejecuta las
 
 El paso de generación de código en sí no es gratuito, pero se ejecuta una vez por fotograma (o una vez por paso de rotación), mientras que el bucle interno generado se ejecuta cientos de veces. El costo amortizado es negligible.
 
+![Texture-mapped sphere prototype — skip tables encode spherical projection, runtime code generation emits pixel sequences](../../build/screenshots/proto_ch06_sphere.png)
+
 ## Lo Que Dark Sabía: Spectrum Expert y los Bloques de Construcción
 
 Hay un detalle en esta historia que la transforma de una curiosidad técnica en un arco narrativo. Dark --- el programador detrás del efecto de esfera de Illusion --- es el mismo Dark que escribió los artículos de *Algoritmos de Programación* en Spectrum Expert #01, publicado en 1997.
@@ -132,7 +134,7 @@ Y son, con bastante precisión, los bloques de construcción usados en Illusion.
 
 La esfera requiere: tablas de consulta trigonométricas para calcular la proyección (seno/coseno, la aproximación parabólica del artículo de Dark). Multiplicación de punto fijo para escalado. Diseño de memoria cuidadoso para velocidad (la misma disciplina de conteo de ciclos que Dark enseña a lo largo de los artículos). El enfoque de tablas de salto para codificar la geometría de la esfera es una aplicación directa del tipo de pensamiento orientado a precomputación que Dark defiende.
 
-Dark publicó el libro de texto. Luego escribió la demo que demuestra cada técnica en él. Veinte años después, Introspec realizó ingeniería inversa de la demo y encontró exactamente los patrones que Dark había enseñado. Tenemos ambos lados de la historia: el profesor explicando sus métodos, y el analista confirmando que esos métodos son precisamente lo que contiene el producto terminado.
+Dark wrote the demo first --- Illusion won at ENLiGHT'96. Then, in 1997--98, he published the textbook that explained every technique he had used. Twenty years later, Introspec reverse-engineered the demo and found exactly the algorithms Dark had documented. We have both sides of the story: the practitioner explaining his methods after the fact, and the analyst confirming that those methods are precisely what the finished product contains.
 
 ## El Debate en Hype: Bucles Internos vs. Matemáticas
 
@@ -154,13 +156,13 @@ Esbocemos cómo construirías una versión simplificada de este efecto. Apuntare
 
 Para cada línea de escaneo *y* (de -28 a +27, centrada en la esfera), calcula el arco visible:
 
-```
+```text
 radius_at_y = sqrt(R^2 - y^2)    ; where R = 28 (sphere radius in pixels)
 ```
 
 Esto da el semi-ancho de la esfera en esa línea de escaneo. Para cada posición de píxel *x* dentro de ese arco, calcula la longitud y latitud correspondientes en la superficie de la esfera:
 
-```
+```text
 latitude  = arcsin(y / R)
 longitude = arcsin(x / radius_at_y) + rotation_angle
 ```
@@ -181,7 +183,7 @@ Para la animación, necesitas tablas de salto para múltiples ángulos de rotaci
 
 Para cada fotograma, lee la tabla de saltos para el ángulo de rotación actual y genera código Z80:
 
-```z80
+```z80 id:ch06_step_3_generate_the_rendering
 ; Code generator pseudocode (in Z80 assembly, this would be
 ; a loop that writes opcodes into a buffer)
 
@@ -244,13 +246,15 @@ Esto está simplificado --- el código real de Illusion está más estrechamente
 
 Una vez que el búfer de código está lleno, llámalo como una subrutina:
 
-```z80
+```z80 id:ch06_step_4_execute_and_display
     ld   hl,source_image      ; source texture (page-aligned, 1 byte/pixel)
     ld   de,screen_address    ; start of sphere area in video memory
     call code_buffer          ; execute the generated rendering code
 ```
 
 El código generado recorre toda la esfera, leyendo píxeles fuente, empaquetándolos en bytes de pantalla, y escribiéndolos en la memoria de video. Cuando retorna, la esfera está dibujada.
+
+![Sphere outline rendered on the ZX Spectrum — monochrome texture mapped onto a rotating sphere using skip-table code generation](../../build/screenshots/ch06_sphere.png)
 
 Para la animación, incrementa el ángulo de rotación, carga la tabla de saltos correspondiente (o regenerala), regenera el código, y renderiza de nuevo.
 
@@ -280,12 +284,12 @@ Dark entendió esto en 1996. Lo codificó en sus artículos de Spectrum Expert e
 
 ## Resumen
 
-- El efecto de esfera en Illusion mapea una imagen fuente monocromática sobre una esfera giratoria usando código Z80 generado dinámicamente.
-- Las tablas de consulta codifican la geometría de la esfera como distancias de salto de píxeles. El código de renderizado se genera a partir de estas tablas en tiempo de ejecución.
-- El bucle interno usa `ADD A,A` y `ADD A,(HL)` para acumular píxeles en bytes de pantalla, con números variables de instrucciones `INC L` para avanzar a través de los datos fuente.
-- Rendimiento: 101 + 32x T-states por byte de salida, donde x depende de la posición.
-- El enfoque ejemplifica un patrón general de la demoscene: precomputar la geometría, generar código, acceder a la memoria secuencialmente.
-- Dark escribió los algoritmos de bloques de construcción en Spectrum Expert (1997) y los aplicó en Illusion (1996). Introspec realizó ingeniería inversa del resultado veinte años después, confirmando las técnicas.
+- The sphere effect in Illusion maps a monochrome source image onto a rotating sphere using dynamically generated Z80 code.
+- Lookup tables encode the sphere's geometry as pixel skip distances. The rendering code is generated from these tables at runtime.
+- The inner loop uses `ADD A,A` and `ADD A,(HL)` to accumulate pixels into screen bytes, with variable numbers of `INC L` instructions to advance through the source data.
+- Performance: 101 + 32x T-states per output byte, where x depends on position.
+- The approach exemplifies a general demoscene pattern: precompute geometry, generate code, access memory sequentially.
+- Dark applied these algorithms in Illusion (1996), then documented them in Spectrum Expert (1997--98). Introspec reverse-engineered the result twenty years later, confirming the techniques.
 
 ---
 

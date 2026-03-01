@@ -20,39 +20,39 @@ Antes de escribir una sola línea de Z80, necesitas una estructura de directorio
 
 ### Estructura de Directorios
 
-```
+```text
 ironclaw/
   src/
-    main.a80           -- punto de entrada, conmutación de bancos, máquina de estados
-    render.a80          -- renderizador de baldosas, motor de desplazamiento
-    sprites.a80         -- rutinas de dibujo de sprites (OR+AND enmascarado)
-    entities.a80        -- actualización de entidades, aparición, desaparición
-    physics.a80         -- gravedad, fricción, salto, respuesta de colisión
-    collisions.a80      -- comprobaciones de colisión AABB y de baldosas
-    ai.a80              -- FSM enemiga: patrulla, persecución, ataque, retirada, muerte
-    player.a80          -- entrada del jugador, estado, animación
-    hud.a80             -- puntuación, vidas, barra de estado
-    menu.a80            -- pantalla de título, opciones, puntuaciones altas
-    loader.a80          -- pantalla de carga, cargador de cinta/esxDOS
-    music_driver.a80    -- reproductor PT3, manejador de interrupciones
-    sfx.a80             -- motor de efectos de sonido, robo de canales
-    esxdos.a80          -- envolturas de E/S de archivos DivMMC
-    banks.a80           -- macros y utilidades de conmutación de bancos
-    defs.a80            -- constantes, mapa de memoria, estructura de entidades
+    main.a80           -- entry point, bank switching, state machine
+    render.a80          -- tile renderer, scroll engine
+    sprites.a80         -- sprite drawing routines (OR+AND masked)
+    entities.a80        -- entity update, spawning, despawning
+    physics.a80         -- gravity, friction, jump, collision response
+    collisions.a80      -- AABB and tile collision checks
+    ai.a80              -- enemy FSM: patrol, chase, attack, retreat, death
+    player.a80          -- player input, state, animation
+    hud.a80             -- score, lives, status bar
+    menu.a80            -- title screen, options, high scores
+    loader.a80          -- loading screen, tape/esxDOS loader
+    music_driver.a80    -- PT3 player, interrupt handler
+    sfx.a80             -- sound effects engine, channel stealing
+    esxdos.a80          -- DivMMC file I/O wrappers
+    banks.a80           -- bank switching macros and utilities
+    defs.a80            -- constants, memory map, entity structure
   data/
-    levels/             -- mapas de baldosas de niveles (comprimidos)
-    tiles/              -- gráficos de conjuntos de baldosas
-    sprites/            -- hojas de sprites (pre-desplazadas)
-    music/              -- archivos de música PT3
-    sfx/                -- tablas de definición de SFX
-    screens/            -- pantalla de carga, pantalla de título
+    levels/             -- level tilemaps (compressed)
+    tiles/              -- tileset graphics
+    sprites/            -- sprite sheets (pre-shifted)
+    music/              -- PT3 music files
+    sfx/                -- SFX definition tables
+    screens/            -- loading screen, title screen
   tools/
-    png2tiles.py        -- convertidor de conjuntos de baldosas desde PNG
-    png2sprites.py      -- convertidor de hojas de sprites desde PNG (genera desplazamientos)
-    map2bin.py          -- JSON/TMX de Tiled a mapa de baldosas binario
-    compress.py         -- envolturas para compresión ZX0/Pletter
-  build/                -- salida compilada (en gitignore)
-  Makefile              -- el sistema de compilación
+    png2tiles.py        -- PNG tileset converter
+    png2sprites.py      -- PNG sprite sheet converter (generates shifts)
+    map2bin.py          -- Tiled JSON/TMX to binary tilemap
+    compress.py         -- wrapper around ZX0/Pletter compression
+  build/                -- compiled output (gitignored)
+  Makefile              -- the build system
 ```
 
 Cada archivo fuente se enfoca en un subsistema. Cada archivo de datos pasa por una cadena de conversión antes de llegar al ensamblador. El directorio `tools/` contiene scripts de Python que convierten formatos amigables para el artista (imágenes PNG, mapas del editor Tiled) en datos binarios listos para el ensamblador.
@@ -111,16 +111,16 @@ Esta cadena significa que el contenido del juego siempre está en formato editab
 
 El ZX Spectrum 128K tiene ocho bancos de RAM de 16KB, numerados del 0 al 7. En cualquier momento, la CPU ve un espacio de direcciones de 64KB:
 
-```
-$0000-$3FFF   ROM (16KB) -- ROM de BASIC o del editor 128K
-$4000-$7FFF   Banco 5 (siempre) -- memoria de pantalla (pantalla normal)
-$8000-$BFFF   Banco 2 (siempre) -- típicamente código
-$C000-$FFFF   Conmutable -- bancos 0-7, seleccionados mediante puerto $7FFD
+```text
+$0000-$3FFF   ROM (16KB) -- BASIC or 128K editor ROM
+$4000-$7FFF   Bank 5 (always) -- screen memory (normal screen)
+$8000-$BFFF   Bank 2 (always) -- typically code
+$C000-$FFFF   Switchable -- banks 0-7, selected via port $7FFD
 ```
 
 Los bancos 5 y 2 están cableados fijamente a `$4000` y `$8000` respectivamente. Solo la ventana superior de 16KB (`$C000-$FFFF`) es conmutable. El registro de selección de banco en el puerto `$7FFD` también controla qué pantalla se muestra (banco 5 o banco 7) y qué página ROM está activa.
 
-```z80
+```z80 id:ch21_memory_map_128k_bank_2
 ; Port $7FFD layout:
 ;   Bit 0-2:  Bank number for $C000-$FFFF (0-7)
 ;   Bit 3:    Screen select (0 = bank 5 normal, 1 = bank 7 shadow)
@@ -148,42 +148,75 @@ La regla crítica: **almacena siempre tu última escritura a `$7FFD`** en una va
 
 Así es como Ironclaw distribuye sus 128KB entre los ocho bancos:
 
+```text
+Bank 0 ($C000)  -- Level data: tilemaps for levels 1-2 (compressed)
+                   Tileset graphics (compressed)
+                   Decompression buffer
+
+Bank 1 ($C000)  -- Level data: tilemaps for levels 3-5 (compressed)
+                   Boss level data and patterns
+                   Enemy spawn tables
+
+Bank 2 ($8000)  -- FIXED: Main game code
+                   Player logic, physics, collisions
+                   Sprite routines, entity system
+                   State machine, HUD
+                   ~ 14KB code, 2KB tables/buffers
+
+Bank 3 ($C000)  -- Sprite graphics (pre-shifted x4)
+                   Player: 6 frames x 4 shifts = 24 variants
+                   Enemies: 4 types x 4 frames x 4 shifts = 64 variants
+                   Projectiles, particles, pickups
+                   ~ 12KB total
+
+Bank 4 ($C000)  -- Music: PT3 song data (title, levels 1-3)
+                   PT3 player code (resident copy)
+
+Bank 5 ($4000)  -- FIXED: Normal screen
+                   Pixel data $4000-$57FF (6,144 bytes)
+                   Attributes $5800-$5AFF (768 bytes)
+                   Remaining ~9KB: interrupt handler, screen buffers
+
+Bank 6 ($C000)  -- Music: PT3 song data (levels 4-5, boss, game over)
+                   SFX definition tables
+                   SFX engine code
+
+Bank 7 ($4000)  -- Shadow screen (used for double buffering)
+                   Also usable as 16KB data storage when
+                   not actively double-buffering
 ```
-Banco 0 ($C000)  -- Datos de nivel: mapas de baldosas para niveles 1-2 (comprimidos)
-                    Gráficos de conjunto de baldosas (comprimidos)
-                    Búfer de descompresión
 
-Banco 1 ($C000)  -- Datos de nivel: mapas de baldosas para niveles 3-5 (comprimidos)
-                    Datos y patrones del nivel del jefe
-                    Tablas de aparición de enemigos
+<!-- figure: ch21_128k_bank_allocation -->
 
-Banco 2 ($8000)  -- FIJO: Código principal del juego
-                    Lógica del jugador, física, colisiones
-                    Rutinas de sprites, sistema de entidades
-                    Máquina de estados, HUD
-                    ~ 14KB código, 2KB tablas/búfers
+```text
+         ZX Spectrum 128K — Ironclaw Bank Allocation
+         ═══════════════════════════════════════════
 
-Banco 3 ($C000)  -- Gráficos de sprites (pre-desplazados x4)
-                    Jugador: 6 fotogramas x 4 desplazamientos = 24 variantes
-                    Enemigos: 4 tipos x 4 fotogramas x 4 desplazamientos = 64 variantes
-                    Proyectiles, partículas, recogibles
-                    ~ 12KB total
+$0000 ┌─────────────────────────────┐
+      │         ROM (16 KB)         │  BASIC / 128K editor
+$4000 ├─────────────────────────────┤
+      │    Bank 5 — FIXED           │  Screen pixels ($4000–$57FF)
+      │    Normal screen            │  Attributes ($5800–$5AFF)
+      │    + IM2 handler, buffers   │  ~9 KB free for interrupt code
+$8000 ├─────────────────────────────┤
+      │    Bank 2 — FIXED           │  Main game code (~14 KB)
+      │    Player, physics, AI      │  Tables, buffers (~2 KB)
+      │    Sprites, entities, HUD   │  Stack grows down from $BFFF
+$C000 ├─────────────────────────────┤
+      │    Switchable bank (0–7)    │  Selected via port $7FFD
+      │    ┌───────────────────┐    │
+      │    │ Bank 0: Levels 1–2│    │  Compressed tilemaps + tileset
+      │    │ Bank 1: Levels 3–5│    │  Boss data, enemy spawns
+      │    │ Bank 3: Sprites   │    │  Pre-shifted ×4 (24+64 variants)
+      │    │ Bank 4: Music A   │    │  PT3: title, levels 1–3
+      │    │ Bank 6: Music B   │    │  PT3: levels 4–5, boss; SFX
+      │    │ Bank 7: Shadow scr│    │  Double buffer / data storage
+      │    └───────────────────┘    │
+$FFFF └─────────────────────────────┘
 
-Banco 4 ($C000)  -- Música: datos de canciones PT3 (título, niveles 1-3)
-                    Código del reproductor PT3 (copia residente)
-
-Banco 5 ($4000)  -- FIJO: Pantalla normal
-                    Datos de píxeles $4000-$57FF (6.144 bytes)
-                    Atributos $5800-$5AFF (768 bytes)
-                    ~9KB restantes: manejador de interrupciones, búfers de pantalla
-
-Banco 6 ($C000)  -- Música: datos de canciones PT3 (niveles 4-5, jefe, game over)
-                    Tablas de definición de SFX
-                    Código del motor de SFX
-
-Banco 7 ($4000)  -- Pantalla sombra (usada para doble búfer)
-                    También utilizable como 16KB de almacenamiento de datos cuando
-                    no se está usando activamente el doble búfer
+  Key: Banks 2 and 5 are always visible (hardwired).
+       Only $C000–$FFFF is switchable.
+       Port $7FFD is write-only — always shadow its state!
 ```
 
 Hay varias cosas que notar sobre esta distribución:
@@ -194,7 +227,7 @@ Hay varias cosas que notar sobre esta distribución:
 
 **La música está dividida entre los bancos 4 y 6.** El reproductor PT3 se ejecuta dentro del manejador de interrupciones IM2, que se dispara una vez por fotograma. El manejador de interrupciones debe paginar el banco de música, actualizar los registros AY y volver a paginar al banco que estuviera usando el bucle principal. Dividir la música entre dos bancos significa que el manejador de interrupciones debe saber qué banco contiene la canción actual. Manejamos esto con una variable:
 
-```z80
+```z80 id:ch21_ironclaw_bank_allocation_3
 current_music_bank:
     db   4              ; bank 4 by default
 
@@ -204,6 +237,9 @@ im2_handler:
     push de
     push hl
     push ix
+    push iy              ; IY must be preserved -- BASIC uses it
+                         ; for system variables, and PT3 players
+                         ; typically use IY internally
 
     ; Save current bank state
     ld   a, (last_bank_state)
@@ -225,6 +261,7 @@ im2_handler:
     ld   bc, $7FFD
     out  (c), a
 
+    pop  iy
     pop  ix
     pop  hl
     pop  de
@@ -246,7 +283,7 @@ La pila vive en la parte superior del espacio de direcciones del banco 2, crecie
 
 Un juego no es un programa. Es una secuencia de modos -- pantalla de título, menú, juego, pausa, game over, puntuaciones altas -- cada uno con diferente manejo de entrada, diferente renderizado y diferente lógica de actualización. El Capítulo 18 introdujo el patrón de máquina de estados. Aquí está cómo Ironclaw lo implementa en el nivel superior.
 
-```z80
+```z80 id:ch21_the_state_machine
 ; Game states
 STATE_LOADER    equ  0
 STATE_TITLE     equ  1
@@ -301,21 +338,21 @@ Las transiciones de estado ocurren escribiendo un nuevo valor en `current_state`
 
 Aquí es donde ocurre la integración. Durante `STATE_GAMEPLAY`, cada fotograma debe ejecutar lo siguiente, en orden:
 
-```
-1. Leer entrada                ~200 T-states
-2. Actualizar física del jugador     ~800 T-states
-3. Actualizar estado del jugador     ~400 T-states
-4. Actualizar enemigos (IA+física)  ~4.000 T-states (8 enemigos)
-5. Comprobar colisiones          ~2.000 T-states
-6. Actualizar proyectiles        ~500 T-states
-7. Desplazar la vista            ~8.000-15.000 T-states (depende del método)
-8. Renderizar baldosas de fondo   ~12.000 T-states (columna/fila expuesta)
-9. Borrar sprites antiguos        ~3.000 T-states (restaurar fondo)
-10. Dibujar sprites             ~8.000 T-states (8 entidades x ~1.000 cada una)
-11. Actualizar HUD               ~1.500 T-states
-12. [La música suena en IM2]     ~3.000 T-states (manejador de interrupciones)
-                                 ─────────────
-                    Total:   ~43.400-50.400 T-states
+```text
+1. Read input                ~200 T-states
+2. Update player physics     ~800 T-states
+3. Update player state       ~400 T-states
+4. Update enemies (AI+phys)  ~4,000 T-states (8 enemies)
+5. Check collisions          ~2,000 T-states
+6. Update projectiles        ~500 T-states
+7. Scroll the viewport       ~8,000-15,000 T-states (depends on method)
+8. Render background tiles   ~12,000 T-states (exposed column/row)
+9. Erase old sprites         ~3,000 T-states (background restore)
+10. Draw sprites             ~8,000 T-states (8 entities x ~1,000 each)
+11. Update HUD               ~1,500 T-states
+12. [Music plays in IM2]     ~3,000 T-states (interrupt handler)
+                             ─────────────
+                    Total:   ~43,400-50,400 T-states
 ```
 
 En un Pentagon con 71.680 T-states por fotograma, eso deja 21.000-28.000 T-states de margen. Suena cómodo, pero es engañoso. Esas estimaciones son promedios. Cuando cuatro enemigos están en pantalla y el jugador está saltando sobre un hueco con proyectiles volando, el peor caso puede dispararse un 20-30% por encima del promedio. Tu margen es tu colchón de seguridad.
@@ -324,7 +361,7 @@ El orden importa. La entrada debe ir primero -- necesitas la intención del juga
 
 ### Lectura de Entrada
 
-```z80
+```z80 id:ch21_reading_input
 ; Read keyboard and Kempston joystick
 ; Returns result in A: bit 0=right, 1=left, 2=down, 3=up, 4=fire
 read_input:
@@ -392,7 +429,7 @@ Cuando la vista se desplaza una columna de baldosas, el renderizador debe:
 
 La copia de columna es una cadena LDIR: 20 filas x 8 líneas de píxeles x 29 bytes = 4.640 bytes a 21 T-states cada uno = 97.440 T-states. Eso es más que un fotograma entero. Por eso la técnica de pantalla sombra del Capítulo 17 es esencial.
 
-```z80
+```z80 id:ch21_the_scroll_engine
 ; Shadow screen double-buffer scroll
 ; Frame N: display screen is bank 5, draw screen is bank 7
 ; 1. Draw the shifted background into bank 7
@@ -424,7 +461,7 @@ Cada sprite de 16x16 tiene cuatro copias pre-desplazadas (Capítulo 16, método 
 
 Los datos de sprites pre-desplazados viven en el banco 3. Durante la fase de renderizado de sprites, el renderizador pagina el banco 3, itera a través de todas las entidades activas y dibuja cada una:
 
-```z80
+```z80 id:ch21_sprite_integration
 ; Draw all active entities
 ; Assumes bank 3 (sprite graphics) is paged in at $C000
 render_entities:
@@ -480,7 +517,7 @@ render_entities:
 
 Antes de dibujar sprites en sus nuevas posiciones, debes borrarlos de sus posiciones antiguas. Ironclaw usa el método de rectángulos sucios del Capítulo 16: antes de dibujar un sprite, guarda el fondo debajo de él en un búfer. Antes de la pasada de renderizado de sprites del siguiente fotograma, restaura esos fondos guardados.
 
-```z80
+```z80 id:ch21_background_restore_dirty
 ; Dirty rectangle entry: 4 bytes
 ;   byte 0: screen address low
 ;   byte 1: screen address high
@@ -537,27 +574,27 @@ Los Capítulos 18 y 19 cubrieron estos sistemas de forma aislada. En el juego in
 
 La actualización de física debe intercalarse con la detección de colisiones. El patrón es:
 
-```
-1. Aplicar gravedad:  velocity_y += GRAVITY
-2. Aplicar entrada:    si (input_right) velocity_x += ACCEL
-3. Movimiento horizontal:
+```text
+1. Apply gravity:  velocity_y += GRAVITY
+2. Apply input:    if (input_right) velocity_x += ACCEL
+3. Horizontal move:
      a. new_x = x + velocity_x
-     b. Comprobar colisiones de baldosas en (new_x, y)
-     c. Si bloqueado: empujar al límite de baldosa, velocity_x = 0
-     d. Si no: x = new_x
-4. Movimiento vertical:
+     b. Check tile collisions at (new_x, y)
+     c. If blocked: push back to tile boundary, velocity_x = 0
+     d. Else: x = new_x
+4. Vertical move:
      a. new_y = y + velocity_y
-     b. Comprobar colisiones de baldosas en (x, new_y)
-     c. Si bloqueado: empujar, velocity_y = 0, establecer bandera on_ground
-     d. Si no: y = new_y, limpiar bandera on_ground
-5. Si (on_ground Y input_jump): velocity_y = -JUMP_FORCE
+     b. Check tile collisions at (x, new_y)
+     c. If blocked: push back, velocity_y = 0, set on_ground flag
+     d. Else: y = new_y, clear on_ground flag
+5. If (on_ground AND input_jump): velocity_y = -JUMP_FORCE
 ```
 
 Los movimientos horizontal y vertical están separados porque la respuesta de colisión debe manejar cada eje independientemente. Si te mueves en diagonal y golpeas una esquina, quieres deslizarte a lo largo de la pared en un eje mientras te detienes en el otro. Comprobar ambos ejes simultáneamente lleva a errores de "pegado" donde el jugador queda atrapado en esquinas.
 
 Todas las posiciones usan formato de punto fijo 8.8 (Capítulo 4): el byte alto es la coordenada de píxel, el byte bajo es la parte fraccionaria. Los valores de velocidad también son 8.8. Esto da precisión de movimiento sub-píxel sin requerir ninguna multiplicación en el bucle principal de física -- la adición y el desplazamiento son suficientes.
 
-```z80
+```z80 id:ch21_physics_collision_loop_2
 ; Apply gravity to entity at IX
 ; velocity_y is 16-bit signed, 8.8 fixed-point
 apply_gravity:
@@ -580,7 +617,7 @@ apply_gravity:
 
 La comprobación de colisión de baldosas convierte una coordenada de píxel a un índice de baldosa, luego busca el tipo de baldosa en el mapa de colisiones del nivel:
 
-```z80
+```z80 id:ch21_tile_collision
 ; Check tile at pixel position (B=x, C=y)
 ; Returns: A = tile type (0=empty, 1=solid, 2=hazard, 3=platform)
 check_tile:
@@ -617,7 +654,7 @@ Para Ironclaw, los anchos de nivel están establecidos en 256 baldosas. Esto no 
 
 Cada tipo de enemigo tiene una máquina de estados finita (Capítulo 19). El estado se almacena en la estructura de entidad:
 
-```z80
+```z80 id:ch21_enemy_ai
 ; Entity structure (16 bytes per entity)
 ENT_X       equ  0    ; 16-bit, 8.8 fixed-point
 ENT_Y       equ  2    ; 16-bit, 8.8 fixed-point
@@ -648,7 +685,7 @@ Los cuatro tipos de enemigos de Ironclaw:
 
 La optimización clave del Capítulo 19: la IA no se ejecuta en cada fotograma. Las actualizaciones de IA enemiga se distribuyen entre fotogramas usando un simple round-robin:
 
-```z80
+```z80 id:ch21_enemy_ai_2
 ; Update AI for subset of enemies each frame
 ; ai_frame_counter cycles 0, 1, 2, 0, 1, 2, ...
 update_enemy_ai:
@@ -715,7 +752,7 @@ El formato de datos PT3 es compacto -- un bucle musical típico de juego de 2-3 
 
 Los efectos de sonido usan el sistema de robo de canales basado en prioridad del Capítulo 11. Cuando se dispara un efecto de sonido (el jugador salta, un enemigo muere, un proyectil se dispara), el motor de SFX secuestra temporalmente un canal AY, anulando lo que la música estaba haciendo en ese canal. Cuando el efecto termina, el canal vuelve al control de la música.
 
-```z80
+```z80 id:ch21_sound_effects
 ; SFX priority levels
 SFX_JUMP       equ  1     ; low priority
 SFX_PICKUP     equ  2
@@ -761,7 +798,7 @@ La actualización de SFX se ejecuta dentro del manejador de interrupciones, desp
 
 Las definiciones de SFX son tablas procedurales en lugar de audio muestreado. Cada entrada es una secuencia de valores de registro por fotograma:
 
-```z80
+```z80 id:ch21_sound_effects_2
 ; SFX: player jump -- ascending frequency sweep on channel C
 sfx_jump_data:
     db   8                 ; duration: 8 frames
@@ -791,15 +828,15 @@ El formato de archivo `.tap` es una secuencia de bloques de datos, cada uno prec
 
 La estructura .tap de Ironclaw:
 
-```
-Bloque 0:  Programa cargador BASIC (autoejecución línea 10)
-Bloque 1:  Pantalla de carga (6912 bytes -> $4000)
-Bloque 2:  Bloque de código principal (contenido del banco 2 -> $8000)
-Bloque 3:  Datos del banco 0 (datos de nivel + baldosas, comprimidos)
-Bloque 4:  Datos del banco 1 (más datos de nivel)
-Bloque 5:  Datos del banco 3 (gráficos de sprites)
-Bloque 6:  Datos del banco 4 (pistas musicales 1-3)
-Bloque 7:  Datos del banco 6 (pistas musicales 4-6, SFX)
+```text
+Block 0:  BASIC loader program (autorun line 10)
+Block 1:  Loading screen (6912 bytes -> $4000)
+Block 2:  Main code block (bank 2 content -> $8000)
+Block 3:  Bank 0 data (level data + tiles, compressed)
+Block 4:  Bank 1 data (more level data)
+Block 5:  Bank 3 data (sprite graphics)
+Block 6:  Bank 4 data (music tracks 1-3)
+Block 7:  Bank 6 data (music tracks 4-6, SFX)
 ```
 
 El cargador BASIC:
@@ -816,7 +853,7 @@ La línea 10 establece RAMTOP por debajo de `$8000`, protegiendo nuestro código
 
 Pero esto solo carga el bloque de código principal. Los datos con bancos (bloques 3-7) deben ser cargados por nuestro propio código Z80, que pagina cada banco y usa la rutina de carga de cinta de la ROM:
 
-```z80
+```z80 id:ch21_the_tap_file_and_basic_loader_3
 ; Load bank data from tape
 ; Called after main code is running
 load_bank_data:
@@ -851,7 +888,7 @@ load_tape_block:
 
 Para usuarios con DivMMC o hardware similar, la carga desde una tarjeta SD es dramáticamente más rápida y fiable. La API de esxDOS proporciona operaciones de archivo a través de `RST $08` seguido de un número de función:
 
-```z80
+```z80 id:ch21_esxdos_loading_divmmc
 ; esxDOS function codes
 F_OPEN      equ  $9A
 F_CLOSE     equ  $9B
@@ -894,7 +931,7 @@ esx_close:
 
 Ironclaw detecta si esxDOS está presente al inicio comprobando la firma de DivMMC. Si está presente, carga todos los datos desde archivos en la tarjeta SD en lugar de la cinta:
 
-```z80
+```z80 id:ch21_esxdos_loading_divmmc_2
 ; Load game data from esxDOS
 ; All bank data stored in separate files on SD card
 load_from_esxdos:
@@ -933,7 +970,7 @@ filename_bank6:  db "IRONCLAW.B6", 0
 
 El código de detección:
 
-```z80
+```z80 id:ch21_esxdos_loading_divmmc_3
 ; Detect esxDOS presence
 ; Sets carry if esxDOS is NOT available
 detect_esxdos:
@@ -969,7 +1006,7 @@ En la práctica, el método de detección más seguro comprueba el byte de ident
 
 La pantalla de carga es la primera impresión del jugador. Se carga como `LOAD "" SCREEN$` en el cargador BASIC, lo que significa que aparece mientras los bloques de datos restantes se cargan desde la cinta. Con esxDOS, la carga es lo suficientemente rápida como para que quieras mostrar la pantalla durante un tiempo mínimo:
 
-```z80
+```z80 id:ch21_loading_screen
 show_loading_screen:
     ; Loading screen is already in screen memory ($4000) from BASIC loader
     ; If loading from esxDOS, load it explicitly:
@@ -1001,7 +1038,7 @@ La pantalla de carga en sí es un archivo de pantalla estándar del Spectrum: 6.
 
 El estado de pantalla de título muestra el logotipo del juego y un fondo animado, luego transiciona al menú con cualquier pulsación de tecla:
 
-```z80
+```z80 id:ch21_title_screen_and_menu
 state_title:
     ; Animate background (e.g., scrolling starfield, colour cycling)
     call title_animate
@@ -1020,7 +1057,7 @@ state_title:
 
 El menú ofrece tres opciones: Iniciar Juego, Opciones, Puntuaciones Altas. La navegación usa las teclas arriba/abajo, la selección usa disparo/enter. El menú es una máquina de estados simple dentro del manejador `STATE_MENU`:
 
-```z80
+```z80 id:ch21_title_screen_and_menu_2
 menu_selection:
     db   0                 ; 0=Start, 1=Options, 2=HiScores
 
@@ -1087,7 +1124,7 @@ state_menu:
 
 Las puntuaciones altas se almacenan en una tabla de 10 entradas en el área de datos del banco 2:
 
-```z80
+```z80 id:ch21_high_scores
 ; High score entry: 3 bytes name + 3 bytes BCD score = 6 bytes
 ; 10 entries = 60 bytes
 HISCORE_COUNT equ 10
@@ -1107,7 +1144,7 @@ hiscore_table:
 
 Las puntuaciones usan BCD (Binary Coded Decimal) -- dos dígitos decimales por byte, tres bytes por puntuación, dando un máximo de 999.999 puntos. BCD es preferible al binario para visualización porque convertir un número binario de 24 bits a decimal en un Z80 requiere división costosa. Con BCD, la instrucción `DAA` maneja el acarreo entre dígitos automáticamente, e imprimir solo requiere enmascarar nibbles:
 
-```z80
+```z80 id:ch21_high_scores_2
 ; Add points to score
 ; DE = points to add (BCD, 2 bytes, max 9999)
 add_score:
@@ -1149,7 +1186,7 @@ Cuando el jugador inicia un nivel o completa uno, el juego debe:
 5. Reiniciar la vista a la posición de inicio del nivel
 6. Reiniciar el estado del motor de desplazamiento
 
-```z80
+```z80 id:ch21_level_loading_and
 ; Load and initialise level
 ; A = level number (0-4)
 load_level:
@@ -1252,7 +1289,7 @@ La franja del borde te dice *que* estás por encima del presupuesto. DeZog te di
 
 **Paso 1: Aislar el fotograma lento.** Establece un punto de interrupción condicional al inicio del bucle principal que se dispare solo cuando una bandera de "desbordamiento de fotograma" esté activada. Añade código para activar esta bandera cuando el fotograma tome demasiado tiempo:
 
-```z80
+```z80 id:ch21_the_profiling_workflow
 ; At the end of the gameplay frame, before HALT:
     ; Check if we're still in the current frame
     ; (a simple approach: read the raster line via floating bus
@@ -1269,46 +1306,46 @@ La franja del borde te dice *que* estás por encima del presupuesto. DeZog te di
 
 Una pasada de perfilado sistemática mide cada subsistema:
 
-```
-Subsistema           T-states medidos    % del presupuesto
+```text
+Subsystem            Measured T-states   Budget %
 ─────────────────────────────────────────────────
-read_input                    187          0,3%
-update_player_physics         743          1,0%
-update_player_state           412          0,6%
-update_enemy_ai             4.231          5,9%   <-- peor caso
-check_all_collisions        2.847          4,0%
-update_projectiles            523          0,7%
-scroll_viewport            12.456         17,4%   <-- costoso
-render_exposed_tiles       11.892         16,6%   <-- costoso
-restore_backgrounds         3.214          4,5%
-draw_sprites               10.156         14,2%   <-- costoso
-update_hud                  1.389          1,9%
-[IM2 music interrupt]       3.102          4,3%
+read_input                    187          0.3%
+update_player_physics         743          1.0%
+update_player_state           412          0.6%
+update_enemy_ai             4,231          5.9%   <-- worst case
+check_all_collisions        2,847          4.0%
+update_projectiles            523          0.7%
+scroll_viewport            12,456         17.4%   <-- expensive
+render_exposed_tiles       11,892         16.6%   <-- expensive
+restore_backgrounds         3,214          4.5%
+draw_sprites               10,156         14.2%   <-- expensive
+update_hud                  1,389          1.9%
+[IM2 music interrupt]       3,102          4.3%
 ─────────────────────────────────────────────────
-TOTAL                      51.152         71,4%
-Margen                     20.528         28,6%
+TOTAL                      51,152         71.4%
+Slack                      20,528         28.6%
 ```
 
 Ese es el caso promedio. Ahora perfila el peor caso -- nivel 3, seis enemigos en pantalla, jugador cerca del borde derecho disparando un desplazamiento:
 
-```
-Subsistema           T-states medidos    % del presupuesto
+```text
+Subsystem            Measured T-states   Budget %
 ─────────────────────────────────────────────────
-read_input                    187          0,3%
-update_player_physics         743          1,0%
-update_player_state           412          0,6%
-update_enemy_ai             5.891          8,2%   <-- 6 enemigos activos
-check_all_collisions        4.156          5,8%   <-- más pares
-update_projectiles          1.247          1,7%   <-- 3 proyectiles
-scroll_viewport            14.892         20,8%   <-- desplazamiento + columna nueva
-render_exposed_tiles       14.456         20,2%   <-- renderizado de columna completa
-restore_backgrounds         4.821          6,7%
-draw_sprites               13.892         19,4%   <-- 10 entidades
-update_hud                  1.389          1,9%
-[IM2 music interrupt]       3.102          4,3%
+read_input                    187          0.3%
+update_player_physics         743          1.0%
+update_player_state           412          0.6%
+update_enemy_ai             5,891          8.2%   <-- 6 enemies active
+check_all_collisions        4,156          5.8%   <-- more pairs
+update_projectiles          1,247          1.7%   <-- 3 projectiles
+scroll_viewport            14,892         20.8%   <-- scroll + new column
+render_exposed_tiles       14,456         20.2%   <-- full column render
+restore_backgrounds         4,821          6.7%
+draw_sprites               13,892         19.4%   <-- 10 entities
+update_hud                  1,389          1.9%
+[IM2 music interrupt]       3,102          4.3%
 ─────────────────────────────────────────────────
-TOTAL                      65.188         90,9%
-Margen                      6.492          9,1%
+TOTAL                      65,188         90.9%
+Slack                       6,492          9.1%
 ```
 
 Solo 9% de margen en el peor caso. Eso es peligrosamente estrecho. Un enemigo más o un patrón musical complejo podrían llevarte por encima.
@@ -1412,7 +1449,7 @@ La música se compone en Vortex Tracker II, que exporta directamente a formato `
 
 La cadena de conversión completa para un nivel:
 
-```
+```text
 tileset.png ──→ png2tiles.py ──→ tileset.bin ──→ pletter ──→ tileset.bin.plt
                                                               │
 level1.tmx ──→ map2bin.py ──→ level1_map.bin ──→ zx0 ──→ level1_map.bin.zx0
@@ -1435,7 +1472,7 @@ Cada paso está automatizado por el Makefile. El artista cambia una baldosa, esc
 
 El entregable final es un archivo `.tap`. sjasmplus puede generar salida `.tap` directamente usando su directiva `SAVETAP`:
 
-```z80
+```z80 id:ch21_release_format_building_the
 ; main.a80 -- top-level assembly file
 
     ; Define the BASIC loader
@@ -1539,7 +1576,7 @@ La diferencia entre un juego funcional y un juego terminado es el pulido. Aquí 
 
 **Antirrebote de entrada.** Ignora las pulsaciones de tecla que duren menos de 2 fotogramas. Sin antirrebote, el cursor del menú saltará opciones porque la tecla se mantuvo presionada durante múltiples fotogramas. Un simple contador de fotogramas por tecla soluciona esto:
 
-```z80
+```z80 id:ch21_final_polish
 ; Debounced fire button
 fire_held_frames:
     db   0
