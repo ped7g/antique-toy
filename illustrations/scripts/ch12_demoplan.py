@@ -135,12 +135,12 @@ for j, (hdr, w) in enumerate(zip(headers, col_widths)):
 
 # Data rows
 layer_colors = {
-    'Ударные': '#1F3864',   # dark navy (drums)
-    'Хеты':    '#FFC000',   # gold (hi-hats)
-    'Мелодия': '#00B050',   # green (melody)
-    'Бас':     '#7030A0',   # purple (bass)
-    'Эффект':  '#1F3864',   # dark navy (effects)
-    'Слой6':   '#7030A0',   # purple (layer 6)
+    'Drums':   '#1F3864',   # dark navy
+    'Hi-hats': '#FFC000',   # gold
+    'Melody':  '#00B050',   # green
+    'Bass':    '#7030A0',   # purple
+    'Effect':  '#1F3864',   # dark navy
+    'Layer 6': '#7030A0',   # purple
 }
 
 for i, (row_data, row_colors) in enumerate(zip(data, colors)):
@@ -188,11 +188,11 @@ ax.text(total_w / 2, -0.3,
 # Legend
 legend_y = n_rows + 1.2
 legend_items = [
-    ('Ударные (Drums)', '#1F3864'),
-    ('Хеты (Hi-hats)', '#FFC000'),
-    ('Мелодия (Melody)', '#00B050'),
-    ('Бас (Bass)', '#7030A0'),
-    ('Эффект (FX)', '#1F3864'),
+    ('Drums', '#1F3864'),
+    ('Hi-hats', '#FFC000'),
+    ('Melody', '#00B050'),
+    ('Bass', '#7030A0'),
+    ('Effect', '#1F3864'),
 ]
 x_legend = 1.0
 for label, color in legend_items:

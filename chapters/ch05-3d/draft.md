@@ -682,6 +682,6 @@ In the next chapter, we will see one of *Illusion*'s most spectacular effects up
 
 ---
 
-*All cycle counts in this chapter are for Pentagon timing (no wait states). On a standard 48K Spectrum with contended memory, expect higher counts for code executing in the lower 32K of RAM. See Appendix A for the complete timing reference.*
+*All cycle counts in this chapter are for Pentagon timing (no wait states). On a standard 48K Spectrum with contended memory, expect higher counts for code executing in the lower 32K of RAM ($4000--$7FFF). Chapter 15.2 explains contention patterns in detail and provides strategies for keeping critical loops out of contended address space. See also Appendix A for the complete timing reference.*
 
 > **Sources:** Dark & STS, "Programming: 3D Graphics" (Spectrum Expert #01, 1997); Dark & STS, "Programming: 3D Graphics --- Midpoint Method" (Spectrum Expert #02, 1998). The virtual processor design and midpoint derivation examples are drawn directly from the SE#02 article.

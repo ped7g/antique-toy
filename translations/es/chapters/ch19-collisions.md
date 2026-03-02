@@ -44,6 +44,8 @@ graph TD
 
 > **La salida anticipada ahorra ciclos:** La mayoría de los pares de entidades están lejos entre sí. La primera prueba de solapamiento en X los rechaza en ~91 T-states. Solo los pares que pasan las cuatro pruebas (peor caso: ~270 T-states) son colisiones reales. Prueba el solapamiento horizontal primero en juegos de desplazamiento lateral -- las entidades están más separadas en X que en Y.
 
+![Detección de colisiones AABB: dos cajas delimitadoras con proyecciones de ejes. El panel izquierdo muestra cajas superpuestas (colisión), el panel derecho muestra cajas separadas (sin colisión). La superposición se prueba en ambos ejes independientemente.](../../illustrations/output/ch19_aabb_collision.png)
+
 En el Z80, almacenamos las posiciones de las entidades como valores de punto fijo 8.8, pero para la detección de colisiones solo necesitamos la parte entera -- el byte alto de cada coordenada. Precisión a nivel de píxel es más que suficiente. Aquí tienes una rutina completa de colisión AABB:
 
 ```z80 id:ch19_aabb_the_only_shape_you_need_2

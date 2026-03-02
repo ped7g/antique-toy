@@ -45,6 +45,8 @@ graph TD
 
 > **Early exit saves cycles:** Most entity pairs are far apart. The first X-overlap test rejects them in ~91 T-states. Only pairs that pass all four tests (worst case: ~270 T-states) are actual collisions. Test horizontal overlap first in side-scrollers -- entities are more spread out on X than Y.
 
+![Виявлення зіткнень AABB: два обмежуючих прямокутники з проекціями осей. Ліва панель показує прямокутники, що перекриваються (зіткнення), права --- розділені (немає зіткнення). Перекриття перевіряється по обох осях незалежно.](../../illustrations/output/ch19_aabb_collision.png)
+
 На Z80 ми зберігаємо позиції сутностей як значення з фіксованою точкою 8.8, але для виявлення зіткнень нам потрібна лише цілочисельна частина — старший байт кожної координати. Точності на рівні пікселів більш ніж достатньо. Ось повна підпрограма AABB-зіткнень:
 
 ```z80 id:ch19_aabb_the_only_shape_you_need_2

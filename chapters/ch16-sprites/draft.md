@@ -175,6 +175,8 @@ For 16 rows: 16 x 144 = **2,304 T-states** (common case). Add boundary-crossing 
 
 But this only draws the sprite. You also need to erase the previous frame's sprite, which means restoring the background --- we will address this in Method 6 (Dirty Rectangles). For now, note that the draw alone is about 35% more expensive than XOR, but the visual quality is incomparably better.
 
+![AND mask clears the sprite area on a checkered background, then OR stamps the graphic. The mask has 0-bits where sprite pixels go (AND clears them) and 1-bits elsewhere (AND preserves the background).](../../illustrations/output/ch16_sprite_masking.png)
+
 ### Byte alignment and the shift problem
 
 The routine above assumes the sprite starts at a byte boundary --- that is, the x coordinate is a multiple of 8. In practice, game characters move pixel by pixel, not in 8-pixel jumps. If your sprite's x position is 53, it starts at byte column 6, pixel 5 within that byte. The sprite data needs to be shifted right by 5 bits.
@@ -850,6 +852,8 @@ main_loop:
 | **Available for game logic** | **~102,000 T** |
 
 With a 2-frame budget of 143,360 T-states (2 x 71,680 on Pentagon), we have roughly 102,000 T-states for game logic, input, and sound. This is generous --- enough for entity AI (Chapter 19), tile collision detection, music playback, and input processing.
+
+> **Contention and sprite rendering (48K/128K Spectrum).** The budget above assumes Pentagon timing with no wait states. On a standard 48K or 128K Spectrum, writes to video RAM ($4000--$5AFF for pixels, $5800--$5AFF for attributes) are contended --- the ULA steals cycles during the active display period. Each `PUSH` in a stack sprite or each `LD (HL),A` in a masked sprite costs roughly 1 extra T-state per access to this region, adding up to ~1.3 T per 2-byte PUSH. For an 8-sprite system, this can add 3,000--5,000 T-states of overhead. **Practical rule:** on non-Pentagon machines, schedule sprite drawing during the border period (top/bottom border give ~14,000 T-states of contention-free time) or accept a 2-frame budget with wider margins. See Chapter 15.2 for the full anatomy of ULA contention patterns and mitigation strategies.
 
 Before drawing each sprite, calculate the screen address from (x, y) using the routine from Chapter 2, and select the correct pre-shifted data based on `x AND $06` (for 4 shift levels). The pre-shift selection logic from Method 3 applies directly.
 

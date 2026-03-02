@@ -81,6 +81,8 @@ During execution, SP is pointed at the right edge of the current scanline in scr
 
 The fundamental constraint: interrupts must be disabled while SP is hijacked. If an interrupt fired, the CPU would push the return address into screen memory, corrupting the display. This means the multicolor rendering code runs with `DI` and re-enables interrupts with `EI` only after SP is restored to the real stack. The entire rendering pass --- all 192 visible scanlines --- happens in one uninterruptible block.
 
+> **Multicolor and contention (48K/128K Spectrum).** The LDPUSH technique writes directly to screen memory via SP, so every PUSH hits contended addresses ($4000--$5AFF). On a standard 48K or 128K Spectrum, the ULA inserts wait states during the active display period, adding ~1 T per PUSH. More critically, cycle-exact beam racing --- aligning attribute changes to specific scanlines --- becomes unreliable because contention delays shift the timing by variable amounts depending on the ULA's pixel clock phase. DenisGrachev's GLUF engine was developed and tested on Pentagon, where contention does not exist. **On non-Pentagon machines**, the Ringo dual-screen approach (switching pages via port $7FFD between scanline groups) is more robust: it does not require cycle-exact timing because the page switch takes effect at the next scanline boundary regardless of when the OUT instruction executes. Treat LDPUSH multicolor as a Pentagon-targeted technique unless you can verify timing on your target hardware. See Chapter 15.2 for the contention model.
+
 ---
 
 ## The GLUF Engine: Multicolor in a Real Game

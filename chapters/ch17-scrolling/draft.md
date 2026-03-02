@@ -167,6 +167,8 @@ For a 168-row play area: 168 x 704 = **118,272 T-states** = **165% of one frame*
 
 There is no way to do a full-screen single-pixel horizontal scroll in one frame with standard methods on a 3.5 MHz Z80. This is the fundamental constraint that drives every scrolling technique in this chapter.
 
+> **Scrolling on non-Pentagon machines.** The budget above assumes Pentagon timing. On a standard 48K or 128K Spectrum, the RL chain writes to video RAM in contended memory ($4000--$7FFF), and every access during the active display period incurs wait states. Expect the per-row cost to rise from ~704 T to ~850 T --- roughly a **20% overhead**. The shadow screen (page 7 on 128K) is also contended, so double-buffered scrolling does not escape the penalty. Buffer-to-screen transfers (LDIR or PUSH-based) hit the same wall: the *source* can be in uncontended RAM above $8000, but the *destination* is always video memory. **Mitigation:** reduce the scrolling area, use character-row scrolling where possible, or synchronise the transfer to the border period. See Chapter 15.2 for contention timing tables and scheduling strategies.
+
 ### Can We Do Better?
 
 You might think unrolling or alternate addressing modes would help. They do not. `RL (IX+d)` costs 23 T-states -- *more* than `RL (HL)` at 15 T. A load-rotate-store sequence (`LD A,(HL) : RLA : LD (HL),A` at 18 T per byte, plus 6 T for `DEC HL` = 24 T) is also slower. The `RL (HL) : DEC HL` chain at 21 T/byte is essentially optimal for horizontal pixel scrolling on the Z80.

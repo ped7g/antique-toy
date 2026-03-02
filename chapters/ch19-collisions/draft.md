@@ -44,6 +44,8 @@ graph TD
 
 > **Early exit saves cycles:** Most entity pairs are far apart. The first X-overlap test rejects them in ~91 T-states. Only pairs that pass all four tests (worst case: ~270 T-states) are actual collisions. Test horizontal overlap first in side-scrollers -- entities are more spread out on X than Y.
 
+![AABB collision detection: two bounding boxes with axis projections. Left panel shows overlapping boxes (collision), right panel shows separated boxes (no collision). Overlap is tested on both axes independently.](../../illustrations/output/ch19_aabb_collision.png)
+
 On the Z80, we store entity positions as 8.8 fixed-point values, but for collision detection we only need the integer part -- the high byte of each coordinate. Pixel-level precision is more than enough. Here is a complete AABB collision routine:
 
 ```z80 id:ch19_aabb_the_only_shape_you_need_2

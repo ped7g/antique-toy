@@ -90,6 +90,8 @@ Un juego no es un solo bucle -- son varios. La pantalla de título tiene su prop
 
 La forma más limpia de organizar esto es una **máquina de estados**: una variable que rastrea en qué estado se encuentra el juego, y una tabla de direcciones de manejadores -- uno por estado.
 
+![Máquina de estados del juego: estados Título, Menú, Juego, Pausa y Fin del Juego conectados por transiciones etiquetadas. Cada estado ejecuta su propio bucle; las transiciones ocurren mediante una tabla de saltos.](../../illustrations/output/ch18_state_machine.png)
+
 ### Definiciones de Estado
 
 ```z80 id:ch18_state_definitions

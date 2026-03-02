@@ -785,6 +785,6 @@ For most demoscene work, **Patrik Rak's CMWC** is the clear winner: excellent qu
 
 ---
 
-*All cycle counts in this chapter are for Pentagon timing (no wait states). On a standard 48K Spectrum or Scorpion with contended memory, expect higher counts for code executing in the lower 32K of RAM. See Appendix A for the complete timing reference.*
+*All cycle counts in this chapter are for Pentagon timing (no wait states). On a standard 48K Spectrum or Scorpion with contended memory, expect higher counts for code executing in the lower 32K of RAM ($4000--$7FFF). Chapter 15.2 explains contention patterns in detail and provides strategies for keeping critical loops out of contended address space. See also Appendix A for the complete timing reference.*
 
 > **Sources:** Dark / X-Trade, "Programming Algorithms" (Spectrum Expert #01, 1997); Gogin, PRNG collection and quality assessment; Patrik Rak (Raxoft), CMWC generator; Ped7g (Peter Helcmanovsky), signed arithmetic gap identification and review

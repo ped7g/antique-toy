@@ -13,11 +13,11 @@
       "translation_sha256": "66768e1d49b9e220bc13cf5885c0bf5ccd92bd22bca4067c7b7c72c6b70cd8f6"
     },
     "chapters/ch04-maths": {
-      "source_sha256": "71201c9983df72bd6cc0220471d897f00a622e4771e739b25e4e69f6a0d0a23f",
+      "source_sha256": "dffef2c7cbbb8fc843e0be192376ba6952ab0a268cb9a51d319ae828cebd6d78",
       "translation_sha256": "51f91f5b555e0613750a2d82f9ae6f51b7f777d9b94733947d1a23482cb31b54"
     },
     "chapters/ch05-3d": {
-      "source_sha256": "7e281b2ee14a8ca10681bfadd179c0c3439f56a5408a133c3434de6d3b5d98cf",
+      "source_sha256": "60f65250f47c1ca5b503c2939f0c9370b746966c6d6672a88e93e82a1eef56f4",
       "translation_sha256": "42934ae035c6d0e4d1e24adc2fe67b1b99e791467bb0d9262f9a39426c32a388"
     },
     "chapters/ch06-sphere": {
@@ -25,12 +25,12 @@
       "translation_sha256": "f8850d5b014d8aede0f6ae14abf9b0fe7fa9b0a9ee5a40b765cae8773f1de3e4"
     },
     "chapters/ch07-rotozoomer": {
-      "source_sha256": "2d22f748be6fe7b01e55617a2bca61e685e207458af43c1e410533ae3db5dfd2",
+      "source_sha256": "ae448b9754e63738eb031a360385acfdfa4d6cd342d4c45619f3f4c77f0ff030",
       "translation_sha256": "64e070db0ce58d7811a37d761909b2d49b4f0ce6a525809d418762de9923735d"
     },
     "chapters/ch08-multicolor": {
-      "source_sha256": "07eac085de7889cc8e515e400b6a6fa4569fce0c729e2f5a2f0a9565e32fd049",
-      "translation_sha256": "cec2f23ea0b1be532f97b5ca36788a065ff9a22e5b21c68b60e0a196115dbf95"
+      "source_sha256": "6e05ff371a73d02fd5addfd8cd1ca5e8d938e47c092ca54f86b656abf0f8320b",
+      "translation_sha256": "64d392262ed0d8673889c0c33daa4ee9e9baf137320b9643c3a8f92233c1ecb8"
     },
     "chapters/ch09-tunnels": {
       "source_sha256": "8be4ef2359373fe9e0ef50f0ba2422e0555900a105978defe43f9eaa5fca37b7",
@@ -53,24 +53,24 @@
       "translation_sha256": "a9c41be907c62daec1090dd626a2650098db2ebd46b88a92f994e966fae46152"
     },
     "chapters/ch14-compression": {
-      "source_sha256": "939d12f839a85532463c1697ff3a6d7cb7c21bf9898d93fcba2d3c6a9d9e351b",
-      "translation_sha256": "7fff024106b9ed8c359ffc55a0bf03352fb0da27b4c82d6e1a5da6c5af74b11a"
+      "source_sha256": "1ee67ed944dd354a8f0343f0f7e3b0f3ebd3c51b1d6c495e55aa9f0a585a8de7",
+      "translation_sha256": "60a393250483cedd3eba9e2e3bf8e63b4557531b865f1e56e1dbec862e4b3a8b"
     },
     "chapters/ch15-anatomy": {
       "source_sha256": "6f924baa9217352832b59b550404046a63931a15d7f0477209e4a683f3aa71c8",
       "translation_sha256": "0509d0f08d0cd50cd104cf56a50af67f93ab96e17356f8c59b5d2a6a0db0e895"
     },
     "chapters/ch16-sprites": {
-      "source_sha256": "39c719cb73e3cd37c3b7d6cf8f3f5ce23aa3b22e8dbb918dbb2fb2821b0203cd",
-      "translation_sha256": "fdeacf2c8a527565048ceb0a03b948d074116b4c60207144ca8a253ece007014"
+      "source_sha256": "7929f2c525949eb21f4ea253c9b4e49dc75acd9e5a56a4128e7a19407feb0e0d",
+      "translation_sha256": "1a52ac6d9a569ecf1659406bdd4bf3ec97def68b9c41f50684ae09150f874646"
     },
     "chapters/ch18-gameloop": {
-      "source_sha256": "2935aa88afb7f6369f1ebe543bdcb4697d2241de8523e0d2bf7a28f3db7ede7f",
-      "translation_sha256": "364216b35ec767675fdfd9c5dee6d5e1f8029a173ecfab6d0998b148370f3788"
+      "source_sha256": "883b2bc9c84fef9e343fc979556d0aebc5f97b88211b37c125b47ae22eace31f",
+      "translation_sha256": "f043e6619caea20977253a09f85b61347116f3487abb0c742285478b18c21162"
     },
     "chapters/ch19-collisions": {
-      "source_sha256": "9631a22051bd9a6eb2edfb3c6afbbe93c65122223b3a4047ec3ce1034aae6dd7",
-      "translation_sha256": "75d37b33f2861c25d619ecadb04e9b3b92dda3dd2606bf550986ffaf9f96f09b"
+      "source_sha256": "cd2247d3a2748d8083cbfbc24ec81ffa2849596e45b228a8b4317649cd8c8f09",
+      "translation_sha256": "d560eeddba5f24545def364e89914c8b4e5afb3b3838b5941f9571707e235cbc"
     },
     "chapters/ch20-demo-workflow": {
       "source_sha256": "c360ff6dc4ddcd39d7d29500e946ff7e0d65e1ec8dd7735a12db9c1a9eac1f14",
@@ -101,8 +101,8 @@
       "translation_sha256": "26f195d8ee0a22faf2f742f723f83e89861d735ffd6ce559169dbf62230d4a7f"
     },
     "chapters/ch17-scrolling": {
-      "source_sha256": "e9a1791e61188577eb5a2235321d2da4d05ebd4128fa8cbe011e5f76db50bb30",
-      "translation_sha256": "327e85f890184bf021845cd7955740a2656f90fd4b49d17726662af08e15ab76"
+      "source_sha256": "89015016935a0c8668dff16ef27872d3fa4c573fd0d1c45db9e882646156bb12",
+      "translation_sha256": "68c2fef250bf001f9bac74235e981892fb59875e02e156b19df7d23e3d8dcc9d"
     },
     "chapters/ch22-porting-agon": {
       "source_sha256": "74683a625e64d2661ec4eac3104c446159ed81e11b8ed2809095450525e07aad",
@@ -151,11 +151,11 @@
       "translation_sha256": "818d5b5b0748f883b1a3674b8706170d8dffae267e3e18824430631b80712e0b"
     },
     "chapters/ch04-maths": {
-      "source_sha256": "71201c9983df72bd6cc0220471d897f00a622e4771e739b25e4e69f6a0d0a23f",
+      "source_sha256": "dffef2c7cbbb8fc843e0be192376ba6952ab0a268cb9a51d319ae828cebd6d78",
       "translation_sha256": "b818739f5daf5e9ad0c048106c39e20edf7aac237fb452e5574f2f5899b4b306"
     },
     "chapters/ch05-3d": {
-      "source_sha256": "7e281b2ee14a8ca10681bfadd179c0c3439f56a5408a133c3434de6d3b5d98cf",
+      "source_sha256": "60f65250f47c1ca5b503c2939f0c9370b746966c6d6672a88e93e82a1eef56f4",
       "translation_sha256": "a140e2bd71db86bfc38daac9f4989b033fad57ee3d49061704b73a48e81b929e"
     },
     "chapters/ch06-sphere": {
@@ -163,12 +163,12 @@
       "translation_sha256": "8346df1620e70f4f4ddf5fcd0d015078047b4389eb191f5266972760a5f0ba43"
     },
     "chapters/ch07-rotozoomer": {
-      "source_sha256": "2d22f748be6fe7b01e55617a2bca61e685e207458af43c1e410533ae3db5dfd2",
+      "source_sha256": "ae448b9754e63738eb031a360385acfdfa4d6cd342d4c45619f3f4c77f0ff030",
       "translation_sha256": "8a40a61758f059c1521226f1940e4203f7247d3067ea5af6cd0737ebc044c199"
     },
     "chapters/ch08-multicolor": {
-      "source_sha256": "07eac085de7889cc8e515e400b6a6fa4569fce0c729e2f5a2f0a9565e32fd049",
-      "translation_sha256": "c969c987c3e6f3e423209c21686f1c39dca7c7ec181fafd59d00f7190a1a5bb6"
+      "source_sha256": "6e05ff371a73d02fd5addfd8cd1ca5e8d938e47c092ca54f86b656abf0f8320b",
+      "translation_sha256": "1139bbe016a621da2c4589336a0a0cf4f28ed819083557d4d37dcb09d6cc5d4b"
     },
     "chapters/ch09-tunnels": {
       "source_sha256": "8be4ef2359373fe9e0ef50f0ba2422e0555900a105978defe43f9eaa5fca37b7",
@@ -191,28 +191,28 @@
       "translation_sha256": "cf7d47a10af2829e0946accf592a1812a78256972a55676b04101b68e9692672"
     },
     "chapters/ch14-compression": {
-      "source_sha256": "939d12f839a85532463c1697ff3a6d7cb7c21bf9898d93fcba2d3c6a9d9e351b",
-      "translation_sha256": "47ad271e718a96dc722a9690ec695e933cb81394a1e8edfb35abccef53002d07"
+      "source_sha256": "1ee67ed944dd354a8f0343f0f7e3b0f3ebd3c51b1d6c495e55aa9f0a585a8de7",
+      "translation_sha256": "fe038b1af3fad4fc43f213572806b9170c5bde5d6f304e0e24c731cfb681c4be"
     },
     "chapters/ch15-anatomy": {
       "source_sha256": "6f924baa9217352832b59b550404046a63931a15d7f0477209e4a683f3aa71c8",
       "translation_sha256": "2d1c1ff7f23cd650a8f9c251e6e7b860fcdc9a28c4fa4018af1dcd45d3fa5b4c"
     },
     "chapters/ch16-sprites": {
-      "source_sha256": "39c719cb73e3cd37c3b7d6cf8f3f5ce23aa3b22e8dbb918dbb2fb2821b0203cd",
-      "translation_sha256": "36e9a6dc1e557cb2eb292f6a0466fe299b8fff54a491b84ca9d927de160c5c9e"
+      "source_sha256": "7929f2c525949eb21f4ea253c9b4e49dc75acd9e5a56a4128e7a19407feb0e0d",
+      "translation_sha256": "67dd218f32351994f3907cc8f05e4660d47eac7891616c95de82ffbf827f6244"
     },
     "chapters/ch17-scrolling": {
-      "source_sha256": "e9a1791e61188577eb5a2235321d2da4d05ebd4128fa8cbe011e5f76db50bb30",
-      "translation_sha256": "da09763a4f711d25692fd344285a84ce5ffa0835b881b23f1e06794ae1b80d3a"
+      "source_sha256": "89015016935a0c8668dff16ef27872d3fa4c573fd0d1c45db9e882646156bb12",
+      "translation_sha256": "3f0297676d1d668995f3a7fd640573bb7999cb2343953e664f0bf39f94669bdf"
     },
     "chapters/ch18-gameloop": {
-      "source_sha256": "2935aa88afb7f6369f1ebe543bdcb4697d2241de8523e0d2bf7a28f3db7ede7f",
-      "translation_sha256": "d0a985d5b9a02cda638daf530242588e68b866512195931385b77aa0dc45c048"
+      "source_sha256": "883b2bc9c84fef9e343fc979556d0aebc5f97b88211b37c125b47ae22eace31f",
+      "translation_sha256": "496d685322777ee6df2883c2044f8e0e681cb9f258a3e7ddbf484fd65a6b793e"
     },
     "chapters/ch19-collisions": {
-      "source_sha256": "9631a22051bd9a6eb2edfb3c6afbbe93c65122223b3a4047ec3ce1034aae6dd7",
-      "translation_sha256": "0a69accf7d7242c59fb2d84a2e30fb9e7c56ff89901514c6fced2a955187b045"
+      "source_sha256": "cd2247d3a2748d8083cbfbc24ec81ffa2849596e45b228a8b4317649cd8c8f09",
+      "translation_sha256": "f808f16811bfac5b5522f692eac80f98cfc7cc8ec191a921f689bb8f9724e2b4"
     },
     "chapters/ch20-demo-workflow": {
       "source_sha256": "c360ff6dc4ddcd39d7d29500e946ff7e0d65e1ec8dd7735a12db9c1a9eac1f14",
@@ -289,11 +289,11 @@
       "translation_sha256": "79d8cab499cd09917a183ddc47460326746de71feb6accc895b70a4ce840a206"
     },
     "chapters/ch04-maths": {
-      "source_sha256": "71201c9983df72bd6cc0220471d897f00a622e4771e739b25e4e69f6a0d0a23f",
+      "source_sha256": "dffef2c7cbbb8fc843e0be192376ba6952ab0a268cb9a51d319ae828cebd6d78",
       "translation_sha256": "55cdcad990fcb90e0d5a26785c08c3fcd27baaafdb86de99d3e265f5f035ea1d"
     },
     "chapters/ch05-3d": {
-      "source_sha256": "7e281b2ee14a8ca10681bfadd179c0c3439f56a5408a133c3434de6d3b5d98cf",
+      "source_sha256": "60f65250f47c1ca5b503c2939f0c9370b746966c6d6672a88e93e82a1eef56f4",
       "translation_sha256": "0923327b67f3a3de6d1f08449a2d9c494b327d6729f261616c0610c15760a9e3"
     },
     "chapters/ch06-sphere": {
@@ -301,12 +301,12 @@
       "translation_sha256": "3f4cd0beb8717422a732a8566d51d2a77506945c9bc9c4afaa9f394ff7657d5c"
     },
     "chapters/ch07-rotozoomer": {
-      "source_sha256": "2d22f748be6fe7b01e55617a2bca61e685e207458af43c1e410533ae3db5dfd2",
+      "source_sha256": "ae448b9754e63738eb031a360385acfdfa4d6cd342d4c45619f3f4c77f0ff030",
       "translation_sha256": "022409ea3bdf01413c297c75580728208cd20551296efefc1943183a6c33618d"
     },
     "chapters/ch08-multicolor": {
-      "source_sha256": "07eac085de7889cc8e515e400b6a6fa4569fce0c729e2f5a2f0a9565e32fd049",
-      "translation_sha256": "e9569d42e5a3ddb6221a24d1d98320c88d56998dc318b0e89768829cef85aef7"
+      "source_sha256": "6e05ff371a73d02fd5addfd8cd1ca5e8d938e47c092ca54f86b656abf0f8320b",
+      "translation_sha256": "773d55971e658bf54f80de96ac171a27ee08a2ca9af4a7a5f788d120c8393038"
     },
     "chapters/ch09-tunnels": {
       "source_sha256": "8be4ef2359373fe9e0ef50f0ba2422e0555900a105978defe43f9eaa5fca37b7",
@@ -329,28 +329,28 @@
       "translation_sha256": "29a8e096e9062f29ca04ac05a66620ca1fdc70fbf4d4195c527c8e5a7e9b8448"
     },
     "chapters/ch14-compression": {
-      "source_sha256": "939d12f839a85532463c1697ff3a6d7cb7c21bf9898d93fcba2d3c6a9d9e351b",
-      "translation_sha256": "542a32974a777008f75747547ab4a2fa8e3aa8c710ff5648509c0b33cf2179d9"
+      "source_sha256": "1ee67ed944dd354a8f0343f0f7e3b0f3ebd3c51b1d6c495e55aa9f0a585a8de7",
+      "translation_sha256": "87625f4784daec3ea8d04e6f587c221d06d3d20a7a5481cccb441bd3e817c9b2"
     },
     "chapters/ch15-anatomy": {
       "source_sha256": "6f924baa9217352832b59b550404046a63931a15d7f0477209e4a683f3aa71c8",
       "translation_sha256": "5c34c8995eec71b214f4a0304d85fadc9cf46c6c3392eac006ffcf76410e5796"
     },
     "chapters/ch16-sprites": {
-      "source_sha256": "39c719cb73e3cd37c3b7d6cf8f3f5ce23aa3b22e8dbb918dbb2fb2821b0203cd",
-      "translation_sha256": "98ee984bdc5dbd6a484bdbf7adcca7345133f998c688c8c5d464f1dbbbb01ddf"
+      "source_sha256": "7929f2c525949eb21f4ea253c9b4e49dc75acd9e5a56a4128e7a19407feb0e0d",
+      "translation_sha256": "f3127964b5a8d6748320374fb047234529eaf777047b396cd1950c850631ae0b"
     },
     "chapters/ch17-scrolling": {
-      "source_sha256": "e9a1791e61188577eb5a2235321d2da4d05ebd4128fa8cbe011e5f76db50bb30",
-      "translation_sha256": "3f4dac9b9d151887ab0f9ebbfe2caaff31d01bfcc124e76b78731c51d516c7fd"
+      "source_sha256": "89015016935a0c8668dff16ef27872d3fa4c573fd0d1c45db9e882646156bb12",
+      "translation_sha256": "d575fa56ace67af68a1d8e8ea9d924d71738aeca6565837dec035ca5b3077954"
     },
     "chapters/ch18-gameloop": {
-      "source_sha256": "2935aa88afb7f6369f1ebe543bdcb4697d2241de8523e0d2bf7a28f3db7ede7f",
-      "translation_sha256": "684430f8f8e0c9ec290c842edf5bdb2a5465252ac17425ebc86fd65ba534e33b"
+      "source_sha256": "883b2bc9c84fef9e343fc979556d0aebc5f97b88211b37c125b47ae22eace31f",
+      "translation_sha256": "0c41c3ab99ead9bed04f1eeeed57d8149d18a0a7869b1e5e38829fdd73ac3296"
     },
     "chapters/ch19-collisions": {
-      "source_sha256": "9631a22051bd9a6eb2edfb3c6afbbe93c65122223b3a4047ec3ce1034aae6dd7",
-      "translation_sha256": "68e1317d4ad6baff27506951324aa1117f652d7d2870e25f1c8e6d9c90e72dfd"
+      "source_sha256": "cd2247d3a2748d8083cbfbc24ec81ffa2849596e45b228a8b4317649cd8c8f09",
+      "translation_sha256": "69c421d8456028b32dac9f967c95475107af1669d6a51d1cb0467dbab937fc5f"
     },
     "chapters/ch20-demo-workflow": {
       "source_sha256": "c360ff6dc4ddcd39d7d29500e946ff7e0d65e1ec8dd7735a12db9c1a9eac1f14",

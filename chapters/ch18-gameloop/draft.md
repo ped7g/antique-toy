@@ -90,6 +90,8 @@ A game is not one loop -- it is several. The title screen has its own loop (anim
 
 The cleanest way to organise these is a **state machine**: a variable that tracks which state the game is in, and a table of handler addresses -- one per state.
 
+![Game state machine: Title, Menu, Game, Pause, and Game Over states connected by labelled transitions. Each state runs its own loop; transitions happen via a jump table.](../../illustrations/output/ch18_state_machine.png)
+
 ### State Definitions
 
 ```z80 id:ch18_state_definitions

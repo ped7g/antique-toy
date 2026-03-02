@@ -114,6 +114,8 @@ All of the compressors in the table above belong to the Lempel-Ziv family. Under
 
 LZ compression replaces repeated byte sequences with back-references. A match says: "copy N bytes from position P bytes back in the already-decoded stream." The compressed stream alternates between **literals** (raw bytes with no useful match) and **matches** (offset + length pairs that reference earlier output).
 
+![LZ compression: a byte stream with literals and back-references. Repeated sequences are replaced by (offset, length) tokens, reducing the stream from 16 bytes to 10 tokens.](../../illustrations/output/ch14_lz_algorithm.png)
+
 The differences between compressors come down to encoding: how many bits for the offset, how many for the length, how to signal literal vs match. Exomizer uses sophisticated variable-length bit-level codes that compress tightly but require careful bit-extraction to decode --- hence the ~250 T-states per byte. LZ4 uses byte-aligned tokens that the Z80 processes with simple shifts and masks --- hence ~34 T-states per byte at the cost of 10 percentage points of ratio. ZX0 uses single-bit flags (0 = literal, 1 = match) with Elias interlaced codes for lengths, hitting a sweet spot between size and speed.
 
 ZX Spectrum data compresses well because it has structure: large areas of identical bytes (black backgrounds, blank attributes), repeated patterns (tiles, fonts, UI), and correlated pixel data at regular offsets. Music compresses well too --- PT3 patterns are full of repeated note sequences and empty rows. What compresses poorly: random data, already-compressed data, and very short files where encoding overhead exceeds savings.

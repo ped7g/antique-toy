@@ -175,6 +175,8 @@ Para 16 filas: 16 x 144 = **2,304 T-states** (caso común). Añadiendo la sobrec
 
 Pero esto solo dibuja el sprite. También necesitas borrar el sprite del fotograma anterior, lo que significa restaurar el fondo --- lo abordaremos en el Método 6 (Rectángulos sucios). Por ahora, observa que el dibujo solo es aproximadamente un 35% más caro que XOR, pero la calidad visual es incomparablemente mejor.
 
+![La máscara AND borra el área del sprite sobre un fondo ajedrezado, luego OR estampa el gráfico. La máscara tiene bits 0 donde van los píxeles del sprite (AND los borra) y bits 1 en el resto (AND preserva el fondo).](../../illustrations/output/ch16_sprite_masking.png)
+
 ### Alineación de bytes y el problema del desplazamiento
 
 La rutina anterior asume que el sprite comienza en un límite de byte --- es decir, la coordenada x es múltiplo de 8. En la práctica, los personajes de juego se mueven píxel a píxel, no en saltos de 8 píxeles. Si la posición x de tu sprite es 53, comienza en la columna de bytes 6, píxel 5 dentro de ese byte. Los datos del sprite necesitan ser desplazados a la derecha 5 bits.
@@ -850,6 +852,8 @@ main_loop:
 | **Disponible para lógica de juego** | **~102,000 T** |
 
 Con un presupuesto de 2 fotogramas de 143,360 T-states (2 x 71,680 en Pentagon), tenemos aproximadamente 102,000 T-states para lógica de juego, entrada y sonido. Esto es generoso --- suficiente para IA de entidades (Capítulo 19), detección de colisiones con baldosas, reproducción de música, y procesamiento de entrada.
+
+> **Contención y renderizado de sprites (48K/128K Spectrum).** El presupuesto anterior asume temporización Pentagon sin estados de espera. En un Spectrum estándar de 48K o 128K, las escrituras a la RAM de vídeo ($4000--$5AFF para píxeles, $5800--$5AFF para atributos) están en memoria contendida --- la ULA roba ciclos durante el período de visualización activa. Cada `PUSH` en un sprite de pila o cada `LD (HL),A` en un sprite con máscara cuesta aproximadamente 1 T-state extra por acceso a esta región, sumando ~1,3 T por PUSH de 2 bytes. Para un sistema de 8 sprites, esto puede añadir 3.000--5.000 T-states de sobrecarga. **Regla práctica:** en máquinas no-Pentagon, programa el dibujado de sprites durante el período de borde (los bordes superior/inferior dan ~14.000 T-states libres de contención) o acepta un presupuesto de 2 fotogramas con márgenes más amplios. Ver Capítulo 15.2 para la anatomía completa de los patrones de contención de la ULA y estrategias de mitigación.
 
 Antes de dibujar cada sprite, calcula la dirección de pantalla desde (x, y) usando la rutina del Capítulo 2, y selecciona los datos pre-desplazados correctos basándote en `x AND $06` (para 4 niveles de desplazamiento). La lógica de selección de pre-desplazamiento del Método 3 aplica directamente.
 
